@@ -41,6 +41,8 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
   const [editCategory, setEditCategory] = useState('')
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [calViewDate, setCalViewDate] = useState(new Date())
   const [balanceTab, setBalanceTab] = useState<'cleared' | 'uncleared' | 'working'>('working')
   const [search, setSearch] = useState('')
   const [deleteWarning, setDeleteWarning] = useState(false)
@@ -48,6 +50,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   const [showReconcileConfirm, setShowReconcileConfirm] = useState(false)
   const categoryPickerRef = useRef<HTMLDivElement>(null)
   const accountSettingsRef = useRef<HTMLDivElement>(null)
+  const datePickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setSelectedId(null)
@@ -58,12 +61,25 @@ export default function TransactionView({ accountId, accounts, transactions, onT
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedId) handleCancel()
-      if (e.key === 'Enter' && selectedId && !showCategoryPicker) handleSave()
+      if (e.key === 'Escape' && selectedId) {
+        if (showDatePicker) { setShowDatePicker(false); return }
+        handleCancel()
+      }
+      if (e.key === 'Enter' && selectedId && !showCategoryPicker && !showDatePicker) handleSave()
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [selectedId, pendingId, showCategoryPicker])
+  }, [selectedId, pendingId, showCategoryPicker, showDatePicker])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setShowDatePicker(false)
+      }
+    }
+    if (showDatePicker) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showDatePicker])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -127,6 +143,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
     }
     setEditDraft({})
     setSelectedId(null)
+    setShowDatePicker(false)
   }
 
   const handleSave = () => {
@@ -136,6 +153,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
     setPendingId(null)
     setEditDraft({})
     setSelectedId(null)
+    setShowDatePicker(false)
   }
 
   const addTransaction = () => {
@@ -601,13 +619,135 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   {/* DATE */}
                   <td className="px-3 py-3">
                     {isSelected ? (
-                      <input
-                        value={editDraft.date ?? ''}
-                        onChange={e => setEditDraft(d => ({ ...d, date: e.target.value }))}
-                        onClick={e => e.stopPropagation()}
-                        className="px-2 py-1 text-sm rounded-lg outline-none w-28"
-                        style={{ background: 'var(--bg-hover-strong)', border: '1px solid rgba(109,40,217,0.4)', color: 'var(--text-primary)' }}
-                      />
+                      <div className="relative" ref={datePickerRef} onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => {
+                            const parts = editDraft.date?.split('/')
+                            const base = parts?.length === 3
+                              ? new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, 1)
+                              : new Date()
+                            setCalViewDate(base)
+                            setShowDatePicker(p => !p)
+                          }}
+                          className="px-2 py-1 text-sm rounded-lg w-28 text-left transition-all"
+                          style={{
+                            background: showDatePicker ? 'rgba(109,40,217,0.25)' : 'var(--bg-hover-strong)',
+                            border: '1px solid rgba(109,40,217,0.4)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          {editDraft.date ?? ''}
+                        </button>
+
+                        {showDatePicker && (() => {
+                          const calYear = calViewDate.getFullYear()
+                          const calMonth = calViewDate.getMonth()
+                          const firstDay = new Date(calYear, calMonth, 1).getDay()
+                          const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
+                          const monthName = calViewDate.toLocaleString('default', { month: 'long' })
+                          const today = new Date()
+                          const selParts = editDraft.date?.split('/')
+                          const selDay   = selParts?.length === 3 ? parseInt(selParts[1]) : -1
+                          const selMonth = selParts?.length === 3 ? parseInt(selParts[0]) - 1 : -1
+                          const selYear  = selParts?.length === 3 ? parseInt(selParts[2]) : -1
+
+                          return (
+                            <div
+                              className="absolute left-0 top-full mt-1 z-50 rounded-2xl p-3 select-none"
+                              style={{
+                                background: 'var(--bg-surface)',
+                                border: '1px solid rgba(109,40,217,0.3)',
+                                boxShadow: '0 16px 48px rgba(0,0,0,0.45)',
+                                minWidth: '256px',
+                              }}
+                            >
+                              {/* Month nav */}
+                              <div className="flex items-center justify-between mb-3 px-1">
+                                <button
+                                  onClick={() => setCalViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-sm transition-all"
+                                  style={{ color: 'var(--text-secondary)' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >‹</button>
+                                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                                  {monthName} {calYear}
+                                </span>
+                                <button
+                                  onClick={() => setCalViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-sm transition-all"
+                                  style={{ color: 'var(--text-secondary)' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >›</button>
+                              </div>
+
+                              {/* Day-of-week headers */}
+                              <div className="grid grid-cols-7 mb-1">
+                                {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                                  <div key={d} className="text-center text-xs font-medium py-1" style={{ color: 'var(--text-faint)' }}>{d}</div>
+                                ))}
+                              </div>
+
+                              {/* Day grid */}
+                              <div className="grid grid-cols-7 gap-0.5">
+                                {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+                                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                                  const isToday = today.getDate() === day && today.getMonth() === calMonth && today.getFullYear() === calYear
+                                  const isSel   = selDay === day && selMonth === calMonth && selYear === calYear
+                                  return (
+                                    <button
+                                      key={day}
+                                      onClick={() => {
+                                        const d = new Date(calYear, calMonth, day)
+                                        setEditDraft(prev => ({
+                                          ...prev,
+                                          date: d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+                                        }))
+                                        setShowDatePicker(false)
+                                      }}
+                                      className="text-xs h-8 w-full flex items-center justify-center rounded-lg transition-all"
+                                      style={{
+                                        background: isSel
+                                          ? 'linear-gradient(135deg, #7c3aed, #2563eb)'
+                                          : 'transparent',
+                                        color: isSel ? 'white' : isToday ? '#a78bfa' : 'var(--text-primary)',
+                                        fontWeight: isSel || isToday ? 600 : 400,
+                                        border: isToday && !isSel ? '1px solid rgba(167,139,250,0.4)' : '1px solid transparent',
+                                        boxShadow: isSel ? '0 2px 8px rgba(109,40,217,0.4)' : undefined,
+                                      }}
+                                      onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = 'var(--bg-hover-strong)' }}
+                                      onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = 'transparent' }}
+                                    >
+                                      {day}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+
+                              {/* Today shortcut */}
+                              <div className="mt-2 pt-2 flex justify-center" style={{ borderTop: '1px solid var(--color-border)' }}>
+                                <button
+                                  onClick={() => {
+                                    const d = new Date()
+                                    setEditDraft(prev => ({
+                                      ...prev,
+                                      date: d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+                                    }))
+                                    setShowDatePicker(false)
+                                  }}
+                                  className="text-xs px-3 py-1.5 rounded-lg transition-all font-medium"
+                                  style={{ color: '#a78bfa' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(167,139,250,0.1)')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                  Today
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
                     ) : (
                       <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{tx.date}</span>
                     )}
