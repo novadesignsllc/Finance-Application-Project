@@ -1,0 +1,460 @@
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import Sidebar from './components/Sidebar'
+import type { Account } from './components/Sidebar'
+import BudgetHeader from './components/BudgetHeader'
+import BudgetTable from './components/BudgetTable'
+import InspectorPanel from './components/InspectorPanel'
+import TransactionView from './components/TransactionView'
+import { mockBudgetData, mockAccounts, mockTransactions } from './data/mockData'
+import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
+
+const MIN_WIDTH = 200
+const MAX_WIDTH = 256
+const DEFAULT_WIDTH = 256
+
+const ACCOUNT_TYPES = [
+  { value: 'checking', label: 'Checking' },
+  { value: 'savings',  label: 'Savings'  },
+  { value: 'credit',   label: 'Credit Card' },
+]
+
+export default function App() {
+  const [activeView, setActiveView] = useState('budget')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [isDark, setIsDark] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH)
+  const [resizeHovered, setResizeHovered] = useState(false)
+  const [accounts, setAccounts] = useState<Account[]>(mockAccounts)
+  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions)
+  const [closedAccountIds, setClosedAccountIds] = useState<Set<string>>(new Set())
+  const [budgetGroups, setBudgetGroups] = useState<CategoryGroup[]>(mockBudgetData)
+  const [budgetMonth, setBudgetMonth] = useState({ year: 2026, month: 4 })
+  // Pre-seed April 2026 with the base assigned values from mockData
+  const [monthlyAssigned, setMonthlyAssigned] = useState<Record<string, Record<string, number>>>(() => {
+    const seed: Record<string, number> = {}
+    mockBudgetData.forEach(g => g.categories.forEach(c => { seed[c.id] = c.assigned }))
+    return { '2026-04': seed }
+  })
+  const [showAddAccount, setShowAddAccount] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newBalance, setNewBalance] = useState('')
+  const [newType, setNewType] = useState('checking')
+  const isResizing = useRef(false)
+
+  const monthKey = `${budgetMonth.year}-${String(budgetMonth.month).padStart(2, '0')}`
+
+  const prevMonth = () => setBudgetMonth(m => m.month === 1 ? { year: m.year - 1, month: 12 } : { ...m, month: m.month - 1 })
+  const nextMonth = () => setBudgetMonth(m => m.month === 12 ? { year: m.year + 1, month: 1 } : { ...m, month: m.month + 1 })
+
+  const onPlanChange = (catId: string, plan: CategoryPlan | undefined) => {
+    setBudgetGroups(prev => prev.map(g => ({
+      ...g,
+      categories: g.categories.map(c => c.id === catId ? { ...c, plan } : c),
+    })))
+  }
+
+  const onAssignedChange = (catId: string, value: number) => {
+    setMonthlyAssigned(prev => ({
+      ...prev,
+      [monthKey]: { ...prev[monthKey], [catId]: value },
+    }))
+  }
+
+  // Build ordered list of month keys from Jan 2026 up to and including budgetMonth
+  const monthSequence = useMemo(() => {
+    const months: string[] = []
+    let y = 2026, m = 1
+    while (y < budgetMonth.year || (y === budgetMonth.year && m <= budgetMonth.month)) {
+      months.push(`${y}-${String(m).padStart(2, '0')}`)
+      m++; if (m > 12) { m = 1; y++ }
+    }
+    return months
+  }, [budgetMonth])
+
+  // Compute activity/available with rollover — available from month N carries into month N+1
+  const budgetGroupsWithActivity = useMemo(() => {
+    return budgetGroups.map(g => ({
+      ...g,
+      categories: g.categories.map(c => {
+        let carryover = 0
+        let assigned = 0
+        let activity = 0
+        let available = 0
+
+        for (const mk of monthSequence) {
+          const [mkYear, mkMonth] = mk.split('-').map(Number)
+          assigned = monthlyAssigned[mk]?.[c.id] ?? 0
+          const catTxs = transactions.filter(t => {
+            if (t.category !== c.name || t.payee === 'Starting Balance') return false
+            const parts = t.date.split('/')
+            return parseInt(parts[2]) === mkYear && parseInt(parts[0]) === mkMonth
+          })
+          activity = catTxs.reduce((sum, t) => sum + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+          available = carryover + assigned + activity
+          carryover = available
+        }
+
+        // Plan status — is this month's assignment meeting the plan?
+        let planMet: boolean | null = null
+        const plan = c.plan
+        if (plan) {
+          if (plan.type === 'build') {
+            planMet = assigned >= (plan.monthlyAmount ?? 0)
+          } else if (plan.type === 'spending') {
+            planMet = assigned >= (plan.monthlyAmount ?? 0) && available >= 0
+          } else if (plan.type === 'savings' && plan.goalAmount && plan.goalDate) {
+            const today = new Date()
+            const goal = new Date(plan.goalDate)
+            const monthsLeft = Math.max(1, (goal.getFullYear() - today.getFullYear()) * 12 + (goal.getMonth() - today.getMonth()))
+            const needed = plan.goalAmount / monthsLeft
+            planMet = assigned >= needed
+          }
+        }
+
+        return { ...c, assigned, activity, available, overspent: available < 0, planMet }
+      }),
+    }))
+  }, [budgetGroups, transactions, budgetMonth, monthlyAssigned, monthSequence])
+
+  const selectedCategory = budgetGroupsWithActivity.flatMap(g => g.categories).find(c => c.id === selectedCategoryId) ?? null
+
+  const totalCash = accounts
+    .filter(a => !closedAccountIds.has(a.id) && a.type !== 'credit')
+    .reduce((sum, a) => sum + transactions.filter(t => t.accountId === a.id).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0), 0)
+
+  const totalAssigned = budgetGroupsWithActivity.flatMap(g => g.categories).reduce((s, c) => s + c.assigned, 0)
+  const moneyToBudget = totalCash - totalAssigned
+
+  // Sum of assigned across all months strictly after budgetMonth
+  const futureBudgeted = useMemo(() => {
+    let total = 0
+    for (const mk of Object.keys(monthlyAssigned)) {
+      const [mkY, mkM] = mk.split('-').map(Number)
+      const isAfter = mkY > budgetMonth.year || (mkY === budgetMonth.year && mkM > budgetMonth.month)
+      if (isAfter) {
+        total += Object.values(monthlyAssigned[mk]).reduce((s, v) => s + v, 0)
+      }
+    }
+    return total
+  }, [monthlyAssigned, budgetMonth])
+
+  const onResetAssigned = () => {
+    setMonthlyAssigned(prev => {
+      const next = { ...prev }
+      delete next[monthKey]
+      return next
+    })
+  }
+
+  const onResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizing.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return
+    setSidebarWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX)))
+  }, [])
+
+  const onMouseUp = useCallback(() => {
+    if (!isResizing.current) return
+    isResizing.current = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [onMouseMove, onMouseUp])
+
+  // Escape closes modal
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeModal()
+      if (e.key === 'Enter' && showAddAccount) handleAddAccount()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [showAddAccount, newName, newBalance, newType])
+
+  const openModal = () => {
+    setNewName('')
+    setNewBalance('')
+    setNewType('checking')
+    setShowAddAccount(true)
+  }
+
+  const closeModal = () => setShowAddAccount(false)
+
+  const handleAddAccount = () => {
+    if (!newName.trim()) return
+    const balance = parseFloat(newBalance.replace(/[^0-9.-]/g, '')) || 0
+    const account: Account = {
+      id: `account-${Date.now()}`,
+      name: newName.trim(),
+      type: newType,
+    }
+    const isCredit = newType === 'credit'
+    const startingTx: Transaction = {
+      id: `starting-${account.id}`,
+      accountId: account.id,
+      date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+      payee: 'Starting Balance',
+      category: 'Money To Budget',
+      memo: '',
+      outflow: isCredit ? Math.abs(balance) : null,
+      inflow: isCredit ? null : balance,
+      cleared: true,
+    }
+    setAccounts(prev => [...prev, account])
+    setTransactions(prev => [...prev, startingTx])
+    closeModal()
+    setSelectedAccountId(account.id)
+  }
+
+  return (
+    <div
+      data-theme={isDark ? 'dark' : 'light'}
+      className="flex h-screen overflow-hidden relative"
+      style={{ background: 'var(--bg-main)' }}
+    >
+      <Sidebar
+        activeView={activeView}
+        onViewChange={setActiveView}
+        isDark={isDark}
+        onThemeToggle={() => setIsDark(p => !p)}
+        width={sidebarWidth}
+        selectedAccountId={selectedAccountId}
+        onAccountSelect={setSelectedAccountId}
+        onAddAccount={openModal}
+        accounts={accounts}
+        onAccountsChange={setAccounts}
+        transactions={transactions}
+        closedAccountIds={closedAccountIds}
+      />
+
+      {/* Resize handle */}
+      <div
+        className="absolute top-0 bottom-0 z-50"
+        style={{ left: sidebarWidth - 3, width: '10px', cursor: 'col-resize' }}
+        onMouseDown={onResizeMouseDown}
+        onMouseEnter={() => setResizeHovered(true)}
+        onMouseLeave={() => setResizeHovered(false)}
+      >
+        <div
+          className="absolute inset-y-0 transition-opacity duration-150"
+          style={{
+            left: '4px',
+            width: '2px',
+            borderRadius: '2px',
+            background: 'linear-gradient(to bottom, rgba(167,139,250,0.9), rgba(59,130,246,0.7), rgba(14,165,233,0.5))',
+            opacity: resizeHovered || isResizing.current ? 1 : 0,
+          }}
+        />
+      </div>
+
+      {/* Gradient border wrapper */}
+      <div
+        className="flex-1 min-w-0"
+        style={{
+          padding: '9px',
+          background: 'linear-gradient(to bottom, #6d28d9 0%, #4338ca 35%, #1d4ed8 70%, #0369a1 100%)',
+          backgroundAttachment: 'fixed',
+        }}
+      >
+        <div
+          className="flex flex-col h-full overflow-hidden"
+          style={{ background: 'var(--bg-main)', borderRadius: '10px' }}
+        >
+          {!selectedAccountId && (
+            <BudgetHeader
+              budgetMonth={budgetMonth}
+              onPrev={prevMonth}
+              onNext={nextMonth}
+              onGoToCurrent={() => setBudgetMonth({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 })}
+              moneyToBudget={moneyToBudget}
+              futureBudgeted={futureBudgeted}
+              onResetAssigned={onResetAssigned}
+            />
+          )}
+
+          <div className="flex flex-1 min-h-0">
+            {selectedAccountId ? (
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+                <TransactionView
+                  accountId={selectedAccountId}
+                  accounts={accounts}
+                  transactions={transactions}
+                  onTransactionsChange={setTransactions}
+                  onCloseAccount={id => {
+                    setClosedAccountIds(prev => new Set([...prev, id]))
+                    setSelectedAccountId(null)
+                  }}
+                  budgetGroups={budgetGroups}
+                  onDeleteAccount={id => {
+                    setAccounts(prev => prev.filter(a => a.id !== id))
+                    setClosedAccountIds(prev => { const n = new Set(prev); n.delete(id); return n })
+                    setSelectedAccountId(null)
+                  }}
+                />
+              </div>
+            ) : (
+              <>
+                <BudgetTable
+                  selectedId={selectedCategoryId}
+                  onSelect={id => setSelectedCategoryId(prev => prev === id ? null : id)}
+                  groups={budgetGroupsWithActivity}
+                  onGroupsChange={setBudgetGroups}
+                  onAssignedChange={onAssignedChange}
+                />
+                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Add Account Modal */}
+      {showAddAccount && (
+        <div
+          className="absolute inset-0 z-[100] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={closeModal}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-sm mx-4"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid rgba(109,40,217,0.3)',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Add Account</h2>
+            <p className="text-sm mb-5" style={{ color: 'var(--text-faint)' }}>Enter your account details below.</p>
+
+            {/* Account Name */}
+            <div className="mb-4">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-faint)' }}>
+                Account Name
+              </label>
+              <input
+                autoFocus
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="e.g. Chase Checking"
+                className="w-full px-3 py-2.5 text-sm rounded-xl outline-none"
+                style={{
+                  background: 'var(--bg-hover)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--text-primary)',
+                }}
+                onFocus={e => (e.currentTarget.style.border = '1px solid rgba(109,40,217,0.5)')}
+                onBlur={e => (e.currentTarget.style.border = '1px solid var(--color-border)')}
+              />
+            </div>
+
+            {/* Account Type */}
+            <div className="mb-4">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-faint)' }}>
+                Account Type
+              </label>
+              <div className="flex gap-2">
+                {ACCOUNT_TYPES.map(t => (
+                  <button
+                    key={t.value}
+                    onClick={() => setNewType(t.value)}
+                    className="flex-1 py-2.5 text-sm font-medium transition-all"
+                    style={{
+                      borderRadius: '12px',
+                      background: newType === t.value
+                        ? 'linear-gradient(135deg, #7c3aed, #2563eb)'
+                        : 'var(--bg-hover)',
+                      color: newType === t.value ? 'white' : 'var(--text-secondary)',
+                      boxShadow: newType === t.value ? '0 4px 14px rgba(109,40,217,0.35)' : undefined,
+                      border: newType === t.value ? 'none' : '1px solid var(--color-border)',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Starting Balance */}
+            <div className="mb-6">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-faint)' }}>
+                {newType === 'credit' ? 'Current Balance Owed' : 'Starting Balance'}
+              </label>
+              <div
+                className="flex items-center px-3 rounded-xl"
+                style={{
+                  background: 'var(--bg-hover)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                <span className="text-sm mr-1" style={{ color: 'var(--text-faint)' }}>$</span>
+                <input
+                  value={newBalance}
+                  onChange={e => setNewBalance(e.target.value)}
+                  placeholder="0.00"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="flex-1 py-2.5 text-sm bg-transparent outline-none"
+                  style={{ color: 'var(--text-primary)' }}
+                  onFocus={e => (e.currentTarget.parentElement!.style.border = '1px solid rgba(109,40,217,0.5)')}
+                  onBlur={e => (e.currentTarget.parentElement!.style.border = '1px solid var(--color-border)')}
+                />
+              </div>
+              {newType === 'credit' && (
+                <p className="text-xs mt-1.5" style={{ color: 'var(--text-faint)' }}>
+                  Enter how much you currently owe.
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={closeModal}
+                className="flex-1 py-2.5 text-sm font-medium transition-all"
+                style={{ borderRadius: '12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddAccount}
+                disabled={!newName.trim()}
+                className="flex-1 py-2.5 text-sm font-semibold transition-all active:scale-95"
+                style={{
+                  borderRadius: '12px',
+                  background: newName.trim()
+                    ? 'linear-gradient(135deg, #7c3aed, #2563eb)'
+                    : 'var(--bg-hover)',
+                  boxShadow: newName.trim() ? '0 4px 14px rgba(109,40,217,0.35)' : undefined,
+                  color: newName.trim() ? 'white' : 'var(--text-faint)',
+                  cursor: newName.trim() ? 'pointer' : 'not-allowed',
+                }}
+                onMouseEnter={e => { if (newName.trim()) e.currentTarget.style.boxShadow = '0 6px 20px rgba(109,40,217,0.5)' }}
+                onMouseLeave={e => { if (newName.trim()) e.currentTarget.style.boxShadow = '0 4px 14px rgba(109,40,217,0.35)' }}
+              >
+                Add Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
