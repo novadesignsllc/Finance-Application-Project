@@ -91,20 +91,8 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
         {/* Logo */}
         <div className="px-5 pt-5 pb-4">
           <div className="flex items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-2xl flex items-center justify-center text-sm font-bold shadow-lg flex-shrink-0"
-              style={{
-                background: 'rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(255,255,255,0.3)',
-                color: '#fff',
-              }}
-            >
-              Z
-            </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate">Dave's Budget</p>
-              <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>Zero-Based</p>
+              <p className="truncate" style={{ fontFamily: "'Ms Madi', cursive", fontSize: '1.75rem', color: '#fff', lineHeight: 1.2 }}>Allocate</p>
             </div>
           </div>
         </div>

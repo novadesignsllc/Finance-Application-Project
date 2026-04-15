@@ -54,7 +54,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Vollkorn', Georgia, serif;
   background: var(--bg-main);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;

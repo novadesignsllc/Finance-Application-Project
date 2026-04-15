@@ -32,14 +32,16 @@ export default function LoginPage() {
         {/* Logo / title */}
         <div className="text-center space-y-1">
           <div
-            className="text-2xl font-bold"
             style={{
+              fontFamily: "'Ms Madi', cursive",
+              fontSize: '2.5rem',
+              lineHeight: 1.2,
               background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Finance App
+            Allocate
           </div>
           <p className="text-sm" style={{ color: 'var(--text-faint)' }}>
             Sign in to your budget
