@@ -218,7 +218,12 @@ export default function TransactionView({ accountId, accounts, transactions, onT
     .sort((a, b) => {
       if (a.payee === 'Starting Balance') return 1
       if (b.payee === 'Starting Balance') return -1
-      return new Date(b.date).getTime() - new Date(a.date).getTime()
+      const parseDate = (s: string) => { const p = s.split('/'); return p.length === 3 ? new Date(+p[2], +p[0]-1, +p[1]) : new Date(s) }
+      const today = new Date(); today.setHours(0,0,0,0)
+      const aFuture = parseDate(a.date) > today
+      const bFuture = parseDate(b.date) > today
+      if (aFuture !== bFuture) return aFuture ? -1 : 1
+      return parseDate(b.date).getTime() - parseDate(a.date).getTime()
     })
 
   const selectedTx = txList.find(t => t.id === selectedId)
@@ -589,6 +594,10 @@ export default function TransactionView({ accountId, accounts, transactions, onT
               const isSelected = selectedId === tx.id
               const isChecked = checkedIds.has(tx.id)
               const isReconciled = !!tx.reconciled
+              const txParts = tx.date.split('/')
+              const txDate = txParts.length === 3 ? new Date(+txParts[2], +txParts[0]-1, +txParts[1]) : new Date(tx.date)
+              const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0)
+              const isFuture = txDate > todayMidnight && tx.payee !== 'Starting Balance'
               return (
                 <tr
                   key={tx.id}
@@ -601,10 +610,12 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                       ? 'rgba(109,40,217,0.12)'
                       : isChecked
                       ? 'rgba(109,40,217,0.07)'
+                      : isFuture
+                      ? 'rgba(56,189,248,0.05)'
                       : undefined,
                   }}
-                  onMouseEnter={e => { if (!isSelected && !isChecked) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                  onMouseLeave={e => { if (!isSelected && !isChecked) e.currentTarget.style.background = '' }}
+                  onMouseEnter={e => { if (!isSelected && !isChecked) e.currentTarget.style.background = isFuture ? 'rgba(56,189,248,0.1)' : 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (!isSelected && !isChecked) e.currentTarget.style.background = isFuture ? 'rgba(56,189,248,0.05)' : '' }}
                 >
                   {/* Checkbox */}
                   <td className="px-3 py-3 text-center" onClick={e => toggleChecked(tx.id, e)}>
@@ -749,7 +760,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                         })()}
                       </div>
                     ) : (
-                      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{tx.date}</span>
+                      <span className="text-sm font-medium" style={{ color: isFuture ? '#38bdf8' : 'var(--text-secondary)' }}>{tx.date}</span>
                     )}
                   </td>
 
