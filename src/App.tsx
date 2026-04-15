@@ -16,6 +16,9 @@ const MIN_WIDTH = 200
 const MAX_WIDTH = 256
 const DEFAULT_WIDTH = 256
 
+const CC_GROUP_ID = 'cc-payments-group'
+const CC_GROUP_NAME = 'Credit Card Payments'
+
 const ACCOUNT_TYPES = [
   { value: 'checking', label: 'Checking' },
   { value: 'savings',  label: 'Savings'  },
@@ -128,6 +131,28 @@ function BudgetApp() {
     }, 600)
   }, [budgetGroups])
 
+  // ── Auto-sync Credit Card Payment categories ───────────────────
+  useEffect(() => {
+    if (!dataLoaded.current) return
+    const openCC = accounts.filter(a => a.type === 'credit' && !closedAccountIds.has(a.id))
+    setBudgetGroups(prev => {
+      const existing = prev.find(g => g.id === CC_GROUP_ID)
+      if (openCC.length === 0) {
+        return existing ? prev.filter(g => g.id !== CC_GROUP_ID) : prev
+      }
+      const desiredCats = openCC.map(a => {
+        const found = existing?.categories.find(c => c.id === `cc-payment-${a.id}`)
+        return found ?? { id: `cc-payment-${a.id}`, name: a.name, emoji: '💳', assigned: 0, activity: 0, available: 0 }
+      })
+      const alreadySynced = existing &&
+        existing.categories.length === desiredCats.length &&
+        desiredCats.every((c, i) => existing.categories[i]?.id === c.id && existing.categories[i]?.name === c.name)
+      if (alreadySynced) return prev
+      const newGroup = { id: CC_GROUP_ID, name: CC_GROUP_NAME, categories: desiredCats }
+      return existing ? prev.map(g => g.id === CC_GROUP_ID ? newGroup : g) : [newGroup, ...prev]
+    })
+  }, [accounts, closedAccountIds])
+
   const monthKey = `${budgetMonth.year}-${String(budgetMonth.month).padStart(2, '0')}`
 
   const prevMonth = () => setBudgetMonth(m => m.month === 1 ? { year: m.year - 1, month: 12 } : { ...m, month: m.month - 1 })
@@ -161,6 +186,10 @@ function BudgetApp() {
 
   // Compute activity/available with rollover — available from month N carries into month N+1
   const budgetGroupsWithActivity = useMemo(() => {
+    // Build map of CC payment category ID → account ID for special activity calculation
+    const ccPaymentMap = new Map<string, string>()
+    accounts.filter(a => a.type === 'credit').forEach(a => ccPaymentMap.set(`cc-payment-${a.id}`, a.id))
+
     return budgetGroups.map(g => ({
       ...g,
       categories: g.categories.map(c => {
@@ -172,12 +201,30 @@ function BudgetApp() {
         for (const mk of monthSequence) {
           const [mkYear, mkMonth] = mk.split('-').map(Number)
           assigned = monthlyAssigned[mk]?.[c.id] ?? 0
-          const catTxs = transactions.filter(t => {
-            if (t.category !== c.name || t.payee === 'Starting Balance') return false
-            const parts = t.date.split('/')
-            return parseInt(parts[2]) === mkYear && parseInt(parts[0]) === mkMonth
-          })
-          activity = catTxs.reduce((sum, t) => sum + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+
+          if (ccPaymentMap.has(c.id)) {
+            // CC payment category: activity derived from the card's own transactions
+            const accountId = ccPaymentMap.get(c.id)!
+            const ccTxs = transactions.filter(t => {
+              if (t.accountId !== accountId) return false
+              const parts = t.date.split('/')
+              return parseInt(parts[2]) === mkYear && parseInt(parts[0]) === mkMonth
+            })
+            activity = ccTxs.reduce((sum, t) => {
+              if (t.payee === 'Starting Balance') return sum - (t.outflow ?? 0) // pre-existing debt
+              if (t.outflow != null) return sum + t.outflow  // CC purchase → earmark for payment
+              if (t.inflow != null) return sum - t.inflow    // payment made → reduces earmark
+              return sum
+            }, 0)
+          } else {
+            const catTxs = transactions.filter(t => {
+              if (t.category !== c.name || t.payee === 'Starting Balance') return false
+              const parts = t.date.split('/')
+              return parseInt(parts[2]) === mkYear && parseInt(parts[0]) === mkMonth
+            })
+            activity = catTxs.reduce((sum, t) => sum + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+          }
+
           available = carryover + assigned + activity
           carryover = available
         }
@@ -202,7 +249,7 @@ function BudgetApp() {
         return { ...c, assigned, activity, available, overspent: available < 0, planMet }
       }),
     }))
-  }, [budgetGroups, transactions, budgetMonth, monthlyAssigned, monthSequence])
+  }, [budgetGroups, transactions, budgetMonth, monthlyAssigned, monthSequence, accounts])
 
   const selectedCategory = budgetGroupsWithActivity.flatMap(g => g.categories).find(c => c.id === selectedCategoryId) ?? null
 
@@ -413,6 +460,7 @@ function BudgetApp() {
                   groups={budgetGroupsWithActivity}
                   onGroupsChange={setBudgetGroups}
                   onAssignedChange={onAssignedChange}
+                  ccGroupId={CC_GROUP_ID}
                 />
                 <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} />
               </>

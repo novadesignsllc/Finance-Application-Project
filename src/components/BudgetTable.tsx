@@ -8,9 +8,10 @@ interface BudgetTableProps {
   groups: CategoryGroupType[]
   onGroupsChange: (groups: CategoryGroupType[]) => void
   onAssignedChange: (catId: string, value: number) => void
+  ccGroupId?: string
 }
 
-export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChange, onAssignedChange }: BudgetTableProps) {
+export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChange, onAssignedChange, ccGroupId }: BudgetTableProps) {
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingCategory, setAddingCategory] = useState(false)
@@ -29,7 +30,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
 
   const commitAddCategory = () => {
     const name = newCatName.trim()
-    const groupId = newCatGroupId || groups[0]?.id
+    const groupId = newCatGroupId || groups.find(g => g.id !== ccGroupId)?.id
     if (name && groupId) {
       onGroupsChange(groups.map(g =>
         g.id === groupId
@@ -46,6 +47,8 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
   const onGroupDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault()
     if (dragGroupIdx.current === null || dragGroupIdx.current === idx) return
+    const ccIdx = ccGroupId ? groups.findIndex(g => g.id === ccGroupId) : -1
+    if (idx === ccIdx || dragGroupIdx.current === ccIdx) return
     const next = [...groups]
     const [moved] = next.splice(dragGroupIdx.current, 1)
     next.splice(idx, 0, moved)
@@ -98,6 +101,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
             onDragEnd={() => { dragGroupIdx.current = null }}
             onEmojiChange={onEmojiChange}
             onAssignedChange={onAssignedChange}
+            isLocked={group.id === ccGroupId}
             onCategoryReorder={cats => {
               onGroupsChange(groups.map((g, i) => i === idx ? { ...g, categories: cats } : g))
             }}
@@ -160,7 +164,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
               className="text-xs rounded-lg px-2 py-1 outline-none"
               style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--color-border)' }}
             >
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {groups.filter(g => g.id !== ccGroupId).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
             <button onClick={commitAddCategory} className="text-xs font-semibold px-3 py-1 rounded-lg" style={{ background: 'linear-gradient(135deg,#7c3aed,#2563eb)', color: 'white' }}>
               Add
@@ -171,7 +175,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
           </div>
         ) : (
           <button
-            onClick={() => { setNewCatGroupId(groups[0]?.id || ''); setAddingCategory(true) }}
+            onClick={() => { setNewCatGroupId(groups.find(g => g.id !== ccGroupId)?.id || ''); setAddingCategory(true) }}
             className="flex items-center gap-2 px-4 py-2.5 w-full text-sm transition-all"
             style={{
               borderRadius: '12px',

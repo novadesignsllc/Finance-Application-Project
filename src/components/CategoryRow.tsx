@@ -12,6 +12,7 @@ interface CategoryRowProps {
   onCatDragOver: (e: React.DragEvent, idx: number) => void
   onCatDragEnd: () => void
   isDraggingOver?: boolean
+  isCCPayment?: boolean
 }
 
 const EMOJI_OPTIONS = [
@@ -20,7 +21,7 @@ const EMOJI_OPTIONS = [
   '🔧','🏥','🎓','🛺','🧳','🎪','🏖️','🌍','💡','🔑','📦','🧹','🎨','🪙','📁',
 ]
 
-export default function CategoryRow({ category, isSelected, onSelect, onEmojiChange, onAssignedChange, catIndex, onCatDragStart, onCatDragOver, onCatDragEnd, isDraggingOver }: CategoryRowProps) {
+export default function CategoryRow({ category, isSelected, onSelect, onEmojiChange, onAssignedChange, catIndex, onCatDragStart, onCatDragOver, onCatDragEnd, isDraggingOver, isCCPayment }: CategoryRowProps) {
   const [editingAssigned, setEditingAssigned] = useState(false)
   const [assignedValue, setAssignedValue] = useState(category.assigned.toString())
 
@@ -93,47 +94,51 @@ export default function CategoryRow({ category, isSelected, onSelect, onEmojiCha
       onMouseLeave={e => { if (!isSelected && !isDraggingOver) e.currentTarget.style.background = 'transparent' }}
     >
       {/* Emoji + picker */}
-      <div className="relative flex-shrink-0" ref={emojiRef} onClick={e => e.stopPropagation()}>
-        <button
-          onClick={() => setShowEmojiPicker(p => !p)}
-          className="text-sm w-7 h-7 flex items-center justify-center rounded-lg transition-all"
-          title="Change emoji"
-          style={{ background: showEmojiPicker ? 'var(--bg-hover-strong)' : 'transparent' }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
-          onMouseLeave={e => { if (!showEmojiPicker) e.currentTarget.style.background = 'transparent' }}
-        >
-          {category.emoji}
-        </button>
-
-        {showEmojiPicker && (
-          <div
-            className="absolute left-0 top-full mt-1 z-50 rounded-2xl p-2"
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid rgba(109,40,217,0.3)',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-              width: '220px',
-            }}
+      {isCCPayment ? (
+        <div className="flex-shrink-0 text-sm w-7 h-7 flex items-center justify-center">💳</div>
+      ) : (
+        <div className="relative flex-shrink-0" ref={emojiRef} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => setShowEmojiPicker(p => !p)}
+            className="text-sm w-7 h-7 flex items-center justify-center rounded-lg transition-all"
+            title="Change emoji"
+            style={{ background: showEmojiPicker ? 'var(--bg-hover-strong)' : 'transparent' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+            onMouseLeave={e => { if (!showEmojiPicker) e.currentTarget.style.background = 'transparent' }}
           >
-            <div className="grid grid-cols-8 gap-0.5">
-              {EMOJI_OPTIONS.map(e => (
-                <button
-                  key={e}
-                  onClick={() => { onEmojiChange(e); setShowEmojiPicker(false) }}
-                  className="text-base w-7 h-7 flex items-center justify-center rounded-lg transition-all"
-                  style={{
-                    background: e === category.emoji ? 'rgba(109,40,217,0.25)' : 'transparent',
-                  }}
-                  onMouseEnter={el => (el.currentTarget.style.background = 'var(--bg-hover-strong)')}
-                  onMouseLeave={el => (el.currentTarget.style.background = e === category.emoji ? 'rgba(109,40,217,0.25)' : 'transparent')}
-                >
-                  {e}
-                </button>
-              ))}
+            {category.emoji}
+          </button>
+
+          {showEmojiPicker && (
+            <div
+              className="absolute left-0 top-full mt-1 z-50 rounded-2xl p-2"
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid rgba(109,40,217,0.3)',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+                width: '220px',
+              }}
+            >
+              <div className="grid grid-cols-8 gap-0.5">
+                {EMOJI_OPTIONS.map(e => (
+                  <button
+                    key={e}
+                    onClick={() => { onEmojiChange(e); setShowEmojiPicker(false) }}
+                    className="text-base w-7 h-7 flex items-center justify-center rounded-lg transition-all"
+                    style={{
+                      background: e === category.emoji ? 'rgba(109,40,217,0.25)' : 'transparent',
+                    }}
+                    onMouseEnter={el => (el.currentTarget.style.background = 'var(--bg-hover-strong)')}
+                    onMouseLeave={el => (el.currentTarget.style.background = e === category.emoji ? 'rgba(109,40,217,0.25)' : 'transparent')}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Name */}
       <div className="flex-1 min-w-0">
@@ -183,11 +188,21 @@ export default function CategoryRow({ category, isSelected, onSelect, onEmojiCha
 
         {/* Activity */}
         <div style={{ width: '128px', textAlign: 'right', paddingRight: '16px' }}>
-          <span className="text-sm" style={{
-            color: category.activity > 0 ? '#34d399' : category.activity === 0 ? 'var(--text-faint)' : 'var(--text-secondary)',
-          }}>
-            {category.activity === 0 ? '$0.00' : `-${formatCurrency(category.activity)}`}
-          </span>
+          {isCCPayment ? (
+            <span className="text-sm" style={{
+              color: category.activity > 0 ? '#34d399' : category.activity === 0 ? 'var(--text-faint)' : '#f87171',
+            }}>
+              {category.activity === 0
+                ? '$0.00'
+                : `${category.activity > 0 ? '+' : '-'}${formatCurrency(category.activity)}`}
+            </span>
+          ) : (
+            <span className="text-sm" style={{
+              color: category.activity > 0 ? '#34d399' : category.activity === 0 ? 'var(--text-faint)' : 'var(--text-secondary)',
+            }}>
+              {category.activity === 0 ? '$0.00' : `-${formatCurrency(category.activity)}`}
+            </span>
+          )}
         </div>
 
         {/* Available */}

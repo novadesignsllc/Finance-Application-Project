@@ -13,12 +13,13 @@ interface CategoryGroupProps {
   onEmojiChange: (catId: string, emoji: string) => void
   onAssignedChange: (catId: string, value: number) => void
   onCategoryReorder: (cats: Category[]) => void
+  isLocked?: boolean
 }
 
 export default function CategoryGroup({
   group, groupIndex, selectedId, onSelect,
   onGroupDragStart, onGroupDragOver, onDragEnd,
-  onEmojiChange, onAssignedChange, onCategoryReorder,
+  onEmojiChange, onAssignedChange, onCategoryReorder, isLocked,
 }: CategoryGroupProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
@@ -55,9 +56,9 @@ export default function CategoryGroup({
 
   return (
     <div
-      draggable
-      onDragStart={e => { e.stopPropagation(); onGroupDragStart(groupIndex) }}
-      onDragOver={e => { onGroupDragOver(e, groupIndex); setIsDraggingOver(true) }}
+      draggable={!isLocked}
+      onDragStart={e => { if (isLocked) return; e.stopPropagation(); onGroupDragStart(groupIndex) }}
+      onDragOver={e => { if (isLocked) return; onGroupDragOver(e, groupIndex); setIsDraggingOver(true) }}
       onDragLeave={() => setIsDraggingOver(false)}
       onDrop={() => setIsDraggingOver(false)}
       onDragEnd={onDragEnd}
@@ -66,30 +67,34 @@ export default function CategoryGroup({
         background: 'var(--bg-surface)',
         border: isDraggingOver
           ? '1px solid rgba(109,40,217,0.5)'
-          : '1px solid var(--color-border)',
+          : isLocked
+            ? '1px solid rgba(239,68,68,0.2)'
+            : '1px solid var(--color-border)',
         boxShadow: isDraggingOver
           ? '0 0 0 2px rgba(109,40,217,0.2)'
           : '0 1px 4px rgba(0,0,0,0.12)',
         opacity: isDraggingOver ? 0.75 : 1,
-        cursor: 'grab',
+        cursor: isLocked ? 'default' : 'grab',
       }}
     >
       {/* Group header */}
       <div
         className="flex items-center py-3 transition-all"
         style={{
-          background: 'rgba(109,40,217,0.06)',
+          background: isLocked ? 'rgba(239,68,68,0.06)' : 'rgba(109,40,217,0.06)',
           borderBottom: collapsed ? 'none' : '1px solid var(--color-border)',
           paddingLeft: '20px',
           paddingRight: '8px',
+          borderRadius: collapsed ? '16px' : undefined,
         }}
         onClick={() => setCollapsed(!collapsed)}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(109,40,217,0.1)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(109,40,217,0.06)')}
+        onMouseEnter={e => (e.currentTarget.style.background = isLocked ? 'rgba(239,68,68,0.1)' : 'rgba(109,40,217,0.1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = isLocked ? 'rgba(239,68,68,0.06)' : 'rgba(109,40,217,0.06)')}
       >
         <div className="w-4 flex-shrink-0" />
-        <div className="flex-1 pl-2">
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+        <div className="flex-1 pl-2 flex items-center gap-2">
+          {isLocked && <span className="text-sm">💳</span>}
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: isLocked ? 'rgba(252,165,165,0.8)' : 'var(--text-secondary)' }}>
             {group.name}
           </span>
         </div>
@@ -128,6 +133,7 @@ export default function CategoryGroup({
               onCatDragOver={onCatDragOver}
               onCatDragEnd={onCatDragEnd}
               isDraggingOver={draggingCatIdx !== null && draggingCatIdx === idx}
+              isCCPayment={isLocked}
             />
           ))}
         </div>
