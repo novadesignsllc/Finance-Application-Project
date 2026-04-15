@@ -7,6 +7,7 @@ import InspectorPanel from './components/InspectorPanel'
 import TransactionView from './components/TransactionView'
 import LoginPage from './components/LoginPage'
 import { supabase } from './lib/supabase'
+import { loadAll, seedDefaultBudget, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction } from './lib/db'
 import { mockBudgetData } from './data/mockData'
 import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
 import type { Session } from '@supabase/supabase-js'
@@ -55,14 +56,77 @@ function BudgetApp() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [closedAccountIds, setClosedAccountIds] = useState<Set<string>>(new Set())
-  const [budgetGroups, setBudgetGroups] = useState<CategoryGroup[]>(mockBudgetData)
+  const [budgetGroups, setBudgetGroups] = useState<CategoryGroup[]>([])
   const [budgetMonth, setBudgetMonth] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 })
   const [monthlyAssigned, setMonthlyAssigned] = useState<Record<string, Record<string, number>>>({})
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [newName, setNewName] = useState('')
   const [newBalance, setNewBalance] = useState('')
   const [newType, setNewType] = useState('checking')
+  const [loading, setLoading] = useState(true)
   const isResizing = useRef(false)
+  const userId = useRef<string | null>(null)
+  const dataLoaded = useRef(false)
+
+  // ── Load all data on mount ──────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      userId.current = user.id
+      try {
+        const data = await loadAll(user.id)
+        // New user: seed default budget template
+        if (data.budgetGroups.length === 0) {
+          const seeded = await seedDefaultBudget(user.id, mockBudgetData)
+          setBudgetGroups(seeded)
+        } else {
+          setBudgetGroups(data.budgetGroups)
+        }
+        setAccounts(data.accounts)
+        setTransactions(data.transactions)
+        setClosedAccountIds(data.closedAccountIds)
+        setMonthlyAssigned(data.monthlyAssigned)
+      } catch (e) {
+        console.error('Failed to load data:', e)
+      } finally {
+        dataLoaded.current = true
+        setLoading(false)
+      }
+    })
+  }, [])
+
+  // ── Sync transactions to Supabase on change ─────────────────────
+  const prevTransactions = useRef<Transaction[]>([])
+  useEffect(() => {
+    if (!dataLoaded.current || !userId.current) return
+    const uid = userId.current
+    const prev = prevTransactions.current
+    const curr = transactions
+
+    const catNameToId = new Map<string, string>()
+    budgetGroups.forEach(g => g.categories.forEach(c => catNameToId.set(c.name, c.id)))
+
+    const changed = curr.filter(tx => {
+      const old = prev.find(p => p.id === tx.id)
+      return !old || JSON.stringify(old) !== JSON.stringify(tx)
+    })
+    const deleted = prev.filter(p => !curr.find(c => c.id === p.id))
+
+    changed.forEach(tx => saveTransaction(uid, tx, catNameToId).catch(console.error))
+    deleted.forEach(tx => removeTransaction(tx.id).catch(console.error))
+    prevTransactions.current = curr
+  }, [transactions])
+
+  // ── Sync groups/categories to Supabase on change (debounced) ───
+  const groupsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!dataLoaded.current || !userId.current) return
+    const uid = userId.current
+    if (groupsSaveTimer.current) clearTimeout(groupsSaveTimer.current)
+    groupsSaveTimer.current = setTimeout(() => {
+      saveGroups(uid, budgetGroups).catch(console.error)
+    }, 600)
+  }, [budgetGroups])
 
   const monthKey = `${budgetMonth.year}-${String(budgetMonth.month).padStart(2, '0')}`
 
@@ -81,6 +145,7 @@ function BudgetApp() {
       ...prev,
       [monthKey]: { ...prev[monthKey], [catId]: value },
     }))
+    if (userId.current) saveAssigned(userId.current, catId, monthKey, value).catch(console.error)
   }
 
   // Build ordered list of month keys from Jan 2026 up to and including budgetMonth
@@ -220,13 +285,13 @@ function BudgetApp() {
     if (!newName.trim()) return
     const balance = parseFloat(newBalance.replace(/[^0-9.-]/g, '')) || 0
     const account: Account = {
-      id: `account-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: newName.trim(),
       type: newType,
     }
     const isCredit = newType === 'credit'
     const startingTx: Transaction = {
-      id: `starting-${account.id}`,
+      id: crypto.randomUUID(),
       accountId: account.id,
       date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
       payee: 'Starting Balance',
@@ -236,11 +301,21 @@ function BudgetApp() {
       inflow: isCredit ? null : balance,
       cleared: true,
     }
-    setAccounts(prev => [...prev, account])
+    setAccounts(prev => {
+      const next = [...prev, account]
+      if (userId.current) saveAccount(userId.current, account, next.length - 1).catch(console.error)
+      return next
+    })
     setTransactions(prev => [...prev, startingTx])
     closeModal()
     setSelectedAccountId(account.id)
   }
+
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center" style={{ background: '#0f0d1a' }}>
+      <div className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>Loading…</div>
+    </div>
+  )
 
   return (
     <div
@@ -319,12 +394,14 @@ function BudgetApp() {
                   onCloseAccount={id => {
                     setClosedAccountIds(prev => new Set([...prev, id]))
                     setSelectedAccountId(null)
+                    if (userId.current) setAccountClosed(id, true).catch(console.error)
                   }}
                   budgetGroups={budgetGroups}
                   onDeleteAccount={id => {
                     setAccounts(prev => prev.filter(a => a.id !== id))
                     setClosedAccountIds(prev => { const n = new Set(prev); n.delete(id); return n })
                     setSelectedAccountId(null)
+                    removeAccount(id).catch(console.error)
                   }}
                 />
               </div>

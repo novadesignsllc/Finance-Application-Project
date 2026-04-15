@@ -15,7 +15,6 @@ interface TransactionViewProps {
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
-let newIdCounter = 1000
 
 export default function TransactionView({ accountId, accounts, transactions, onTransactionsChange, onCloseAccount, onDeleteAccount, budgetGroups }: TransactionViewProps) {
   const allCategories = [
@@ -142,7 +141,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   const addTransaction = () => {
     if (pendingId) setTxList(prev => prev.filter(t => t.id !== pendingId))
     const newTx: Transaction = {
-      id: `new-${++newIdCounter}`,
+      id: crypto.randomUUID(),
       accountId,
       date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
       payee: '',

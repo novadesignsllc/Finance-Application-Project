@@ -22,7 +22,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
 
   const commitAddGroup = () => {
     const name = newGroupName.trim()
-    if (name) onGroupsChange([...groups, { id: `group-${Date.now()}`, name, categories: [] }])
+    if (name) onGroupsChange([...groups, { id: crypto.randomUUID(), name, categories: [] }])
     setAddingGroup(false)
     setNewGroupName('')
   }
@@ -33,7 +33,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
     if (name && groupId) {
       onGroupsChange(groups.map(g =>
         g.id === groupId
-          ? { ...g, categories: [...g.categories, { id: `cat-${Date.now()}`, name, emoji: '📁', assigned: 0, activity: 0, available: 0 }] }
+          ? { ...g, categories: [...g.categories, { id: crypto.randomUUID(), name, emoji: '📁', assigned: 0, activity: 0, available: 0 }] }
           : g
       ))
     }
