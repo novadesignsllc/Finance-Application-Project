@@ -54,7 +54,7 @@
 
 body {
   margin: 0;
-  font-family: 'Vollkorn', Georgia, serif;
+  font-family: 'Lexend', system-ui, sans-serif;
   background: var(--bg-main);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
