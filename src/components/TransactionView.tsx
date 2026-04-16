@@ -46,7 +46,6 @@ const fmt = (n: number) =>
 export default function TransactionView({ accountId, accounts, transactions, onTransactionsChange, onCloseAccount, onDeleteAccount, budgetGroups }: TransactionViewProps) {
   const allCategories = [
     { group: 'Inflow', items: ['Money To Budget'] },
-    { group: 'Credit Card Payments', items: accounts.filter(a => a.type === 'credit').map(a => a.name) },
     ...budgetGroups.map(g => ({ group: g.name, items: g.categories.map(c => c.name) })),
   ]
   const account = accounts.find(a => a.id === accountId)
@@ -1119,42 +1118,29 @@ function CategoryPicker({ value, onSelect, categories }: { value: string; onSele
         />
       </div>
 
-      <button
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors"
-        style={{ color: '#a78bfa' }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-        onMouseLeave={e => (e.currentTarget.style.background = '')}
-        onClick={() => onSelect('New Category')}
-      >
-        <span className="text-base leading-none">+</span>
-        New Category
-      </button>
-
-      {value && (
-        <div className="px-4 pt-1 pb-1">
-          <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-faint)' }}>Selected</p>
-          <div className="flex items-center px-3 py-2 rounded-xl" style={{ background: 'rgba(109,40,217,0.15)' }}>
-            <span className="text-sm flex items-center gap-2 text-emerald-400"><span>✓</span>{value}</span>
-          </div>
-        </div>
-      )}
-
       <div className="max-h-56 overflow-y-auto px-2 pb-2">
         {filtered.map(group => (
           <div key={group.group} className="mt-2">
             <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{group.group}</p>
-            {group.items.map(item => (
-              <button
-                key={item}
-                onClick={() => onSelect(item)}
-                className="w-full flex items-center px-3 py-2 text-sm rounded-xl transition-colors text-left"
-                style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.background = '')}
-              >
-                {item}
-              </button>
-            ))}
+            {group.items.map(item => {
+              const isSelected = item === value
+              return (
+                <button
+                  key={item}
+                  onClick={() => onSelect(item)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-colors text-left"
+                  style={{
+                    color: isSelected ? '#34d399' : 'var(--text-secondary)',
+                    background: isSelected ? 'rgba(52,211,153,0.08)' : '',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = isSelected ? 'rgba(52,211,153,0.12)' : 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = isSelected ? 'rgba(52,211,153,0.08)' : '')}
+                >
+                  {item}
+                  {isSelected && <span className="text-xs">✓</span>}
+                </button>
+              )
+            })}
           </div>
         ))}
       </div>
