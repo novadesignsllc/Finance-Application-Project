@@ -479,6 +479,7 @@ function BudgetApp() {
                 />
               </div>
             ) : activeView === 'credit' ? (
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
               <CreditView
                 accounts={accounts}
                 closedAccountIds={closedAccountIds}
@@ -502,6 +503,7 @@ function BudgetApp() {
                 }}
                 gradientColors={gradientColors}
               />
+              </div>
             ) : (
               <>
                 <BudgetTable
