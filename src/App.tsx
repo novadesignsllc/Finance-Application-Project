@@ -484,15 +484,6 @@ function BudgetApp() {
                 accounts={accounts}
                 closedAccountIds={closedAccountIds}
                 transactions={transactions}
-                budgetGroupsWithActivity={budgetGroupsWithActivity}
-                onAssignedChange={onAssignedChange}
-                moneyToBudget={moneyToBudget}
-                budgetMonth={budgetMonth}
-                onPrev={prevMonth}
-                onNext={nextMonth}
-                onGoToCurrent={() => setBudgetMonth({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 })}
-                futureBudgeted={futureBudgeted}
-                onResetAssigned={onResetAssigned}
                 creditPlans={creditPlans}
                 onCreditPlanChange={(id, plan) => {
                   setCreditPlans(prev => {
@@ -509,7 +500,7 @@ function BudgetApp() {
                 <BudgetTable
                   selectedId={selectedCategoryId}
                   onSelect={id => setSelectedCategoryId(prev => prev === id ? null : id)}
-                  groups={budgetGroupsWithActivity.filter(g => g.id !== CC_GROUP_ID)}
+                  groups={budgetGroupsWithActivity}
                   onGroupsChange={setBudgetGroups}
                   onAssignedChange={onAssignedChange}
                   ccGroupId={CC_GROUP_ID}
