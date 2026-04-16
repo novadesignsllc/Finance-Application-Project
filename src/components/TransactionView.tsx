@@ -124,7 +124,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   // Stable global keyboard shortcuts (Ctrl+Z, Ctrl+X, Delete/Backspace)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+      const inInput = (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') || e.target instanceof HTMLTextAreaElement
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); kbRef.current.undo() }
       if ((e.ctrlKey || e.metaKey) && e.key === 'x') { e.preventDefault(); kbRef.current.redo() }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) kbRef.current.del()
