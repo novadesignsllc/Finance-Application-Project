@@ -13,6 +13,8 @@ interface SidebarProps {
   onViewChange: (view: string) => void
   isDark: boolean
   onThemeToggle: () => void
+  gradientColors: string[]
+  onGradientChange: (colors: string[]) => void
   width: number
   selectedAccountId: string | null
   onAccountSelect: (id: string | null) => void
@@ -23,7 +25,13 @@ interface SidebarProps {
   closedAccountIds: Set<string>
 }
 
-export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggle, width, selectedAccountId, onAccountSelect, onAddAccount, accounts, onAccountsChange, transactions, closedAccountIds }: SidebarProps) {
+function buildGradient(colors: string[]): string {
+  if (colors.length === 1) return colors[0]
+  const stops = colors.map((c, i) => `${c} ${Math.round(i / (colors.length - 1) * 100)}%`)
+  return `linear-gradient(to bottom, ${stops.join(', ')})`
+}
+
+export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggle, gradientColors, onGradientChange, width, selectedAccountId, onAccountSelect, onAddAccount, accounts, onAccountsChange, transactions, closedAccountIds }: SidebarProps) {
   const setAccounts = onAccountsChange
   const [showSettings, setShowSettings] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
@@ -71,7 +79,7 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
       className="relative flex-shrink-0 flex flex-col h-screen overflow-hidden"
       style={{
         width,
-        background: 'linear-gradient(to bottom, #6d28d9 0%, #4338ca 35%, #1d4ed8 70%, #0369a1 100%)',
+        background: buildGradient(gradientColors),
         backgroundAttachment: 'fixed',
         transition: 'box-shadow 0.3s ease',
       }}
@@ -285,6 +293,89 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
                     style={{ left: isDark ? '1.375rem' : '0.25rem' }}
                   />
                 </button>
+              </div>
+
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>
+                  Gradient
+                </p>
+
+                {/* Preview strip */}
+                <div
+                  className="w-full h-6 rounded-lg mb-3"
+                  style={{ background: buildGradient(gradientColors) }}
+                />
+
+                {/* Color stops */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {gradientColors.map((color, i) => (
+                    <div key={i} className="relative">
+                      <button
+                        title={`Stop ${i + 1}: ${color}`}
+                        className="w-8 h-8 rounded-lg transition-all"
+                        style={{
+                          background: color,
+                          border: '2px solid rgba(255,255,255,0.3)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        }}
+                        onClick={() => {
+                          const input = document.getElementById(`color-stop-${i}`) as HTMLInputElement
+                          input?.click()
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.7)')}
+                        onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)')}
+                      />
+                      <input
+                        id={`color-stop-${i}`}
+                        type="color"
+                        value={color}
+                        onChange={e => {
+                          const next = [...gradientColors]
+                          next[i] = e.target.value
+                          onGradientChange(next)
+                        }}
+                        className="absolute opacity-0 pointer-events-none w-0 h-0"
+                      />
+                      {gradientColors.length > 2 && (
+                        <button
+                          onClick={() => onGradientChange(gradientColors.filter((_, j) => j !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-xs leading-none transition-all"
+                          style={{ background: 'rgba(220,38,38,0.85)', color: 'white', lineHeight: 1 }}
+                          title="Remove stop"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  {gradientColors.length < 4 && (
+                    <button
+                      onClick={() => onGradientChange([...gradientColors, gradientColors[gradientColors.length - 1]])}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all"
+                      style={{
+                        border: '2px dashed rgba(255,255,255,0.3)',
+                        color: 'rgba(255,255,255,0.5)',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.6)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)' }}
+                      title="Add color stop"
+                    >
+                      +
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => onGradientChange(['#6d28d9', '#4338ca', '#1d4ed8', '#0369a1'])}
+                    className="ml-auto text-xs px-2 py-1 rounded-lg transition-all"
+                    style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.07)' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
+                    title="Reset to default"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
 
               <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>

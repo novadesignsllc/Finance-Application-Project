@@ -16,6 +16,12 @@ const MIN_WIDTH = 200
 const MAX_WIDTH = 256
 const DEFAULT_WIDTH = 256
 
+function buildGradient(colors: string[]): string {
+  if (colors.length === 1) return colors[0]
+  const stops = colors.map((c, i) => `${c} ${Math.round(i / (colors.length - 1) * 100)}%`)
+  return `linear-gradient(to bottom, ${stops.join(', ')})`
+}
+
 const CC_GROUP_ID = 'cc-payments-group'
 const CC_GROUP_NAME = 'Credit Card Payments'
 
@@ -54,6 +60,10 @@ function BudgetApp() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [isDark, setIsDark] = useState(true)
+  const [gradientColors, setGradientColors] = useState<string[]>(() => {
+    try { const s = localStorage.getItem('gradientColors'); return s ? JSON.parse(s) : ['#6d28d9', '#4338ca', '#1d4ed8', '#0369a1'] }
+    catch { return ['#6d28d9', '#4338ca', '#1d4ed8', '#0369a1'] }
+  })
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH)
   const [resizeHovered, setResizeHovered] = useState(false)
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -375,6 +385,8 @@ function BudgetApp() {
         onViewChange={setActiveView}
         isDark={isDark}
         onThemeToggle={() => setIsDark(p => !p)}
+        gradientColors={gradientColors}
+        onGradientChange={colors => { setGradientColors(colors); localStorage.setItem('gradientColors', JSON.stringify(colors)) }}
         width={sidebarWidth}
         selectedAccountId={selectedAccountId}
         onAccountSelect={setSelectedAccountId}
@@ -410,7 +422,7 @@ function BudgetApp() {
         className="flex-1 min-w-0"
         style={{
           padding: '9px',
-          background: 'linear-gradient(to bottom, #6d28d9 0%, #4338ca 35%, #1d4ed8 70%, #0369a1 100%)',
+          background: buildGradient(gradientColors),
           backgroundAttachment: 'fixed',
         }}
       >
