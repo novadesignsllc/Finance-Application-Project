@@ -646,11 +646,8 @@ export default function TransactionView({ accountId, accounts, transactions, onT
           style={{
             borderRadius: '12px',
             background: gradient,
-            boxShadow: '0 4px 14px rgba(109,40,217,0.35)',
             color: 'white',
           }}
-          onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 6px 20px rgba(109,40,217,0.5)')}
-          onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 14px rgba(109,40,217,0.35)')}
         >
           <span className="text-base leading-none">+</span>
           Add Transaction
