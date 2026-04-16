@@ -78,13 +78,60 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   const categoryPickerRef = useRef<HTMLDivElement>(null)
   const accountSettingsRef = useRef<HTMLDivElement>(null)
   const datePickerRef = useRef<HTMLDivElement>(null)
+  const historyRef = useRef<Transaction[][]>([])
+  const futureRef  = useRef<Transaction[][]>([])
+
+  // Keep a ref to always-current action callbacks so keyboard handler never goes stale
+  const kbRef = useRef({ undo: () => {}, redo: () => {}, del: () => {} })
+
+  const pushHistory = () => {
+    historyRef.current = [...historyRef.current.slice(-49), [...txList]]
+    futureRef.current  = []
+  }
+
+  const handleUndo = () => {
+    if (!historyRef.current.length) return
+    const prev = historyRef.current[historyRef.current.length - 1]
+    futureRef.current  = [[...txList], ...futureRef.current.slice(0, 49)]
+    historyRef.current = historyRef.current.slice(0, -1)
+    onTransactionsChange([...otherTx, ...prev])
+  }
+
+  const handleRedo = () => {
+    if (!futureRef.current.length) return
+    const next = futureRef.current[0]
+    historyRef.current = [...historyRef.current.slice(-49), [...txList]]
+    futureRef.current  = futureRef.current.slice(1)
+    onTransactionsChange([...otherTx, ...next])
+  }
+
+  // Update ref every render so the stable keyboard effect always calls current fns
+  kbRef.current = {
+    undo: handleUndo,
+    redo: handleRedo,
+    del:  () => { if (checkedIds.size > 0 && !selectedId) confirmDelete() },
+  }
 
   useEffect(() => {
     setSelectedId(null)
     setPendingId(null)
     setCheckedIds(new Set())
     setSearch('')
+    historyRef.current = []
+    futureRef.current  = []
   }, [accountId])
+
+  // Stable global keyboard shortcuts (Ctrl+Z, Ctrl+X, Delete/Backspace)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); kbRef.current.undo() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'x') { e.preventDefault(); kbRef.current.redo() }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) kbRef.current.del()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -175,6 +222,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
 
   const handleSave = () => {
     if (selectedId && Object.keys(editDraft).length > 0) {
+      pushHistory()
       setTxList(prev => {
         const updated = prev.map(t => t.id === selectedId ? { ...t, ...editDraft } : t)
         const saved = updated.find(t => t.id === selectedId)
@@ -203,6 +251,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   }
 
   const addTransaction = () => {
+    pushHistory()
     if (pendingId) setTxList(prev => prev.filter(t => t.id !== pendingId))
     const newTx: Transaction = {
       id: crypto.randomUUID(),
@@ -244,6 +293,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
   }
 
   const doDelete = () => {
+    pushHistory()
     setTxList(prev => prev.filter(t => !checkedIds.has(t.id)))
     setCheckedIds(new Set())
     setDeleteWarning(false)
@@ -553,17 +603,24 @@ export default function TransactionView({ accountId, accounts, transactions, onT
 
         <div className="w-px h-5 mx-1" style={{ background: 'var(--color-border)' }} />
 
-        {['↩ Undo', '↪ Redo'].map(label => (
-          <button
-            key={label}
-            className="px-3 py-2 text-sm transition-all"
-            style={{ borderRadius: '10px', color: 'var(--text-faint)' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            {label}
-          </button>
-        ))}
+        <button
+          onClick={handleUndo}
+          className="px-3 py-2 text-sm transition-all"
+          style={{ borderRadius: '10px', color: 'var(--text-faint)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          ↩ Undo
+        </button>
+        <button
+          onClick={handleRedo}
+          className="px-3 py-2 text-sm transition-all"
+          style={{ borderRadius: '10px', color: 'var(--text-faint)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          ↪ Redo
+        </button>
 
         <div className="flex-1" />
 
@@ -615,17 +672,17 @@ export default function TransactionView({ accountId, accounts, transactions, onT
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--color-border)' }}>
-              <th className="w-8 px-3 py-3" />
+              <th className="w-8 px-3 py-2" />
               {['DATE', 'PAYEE', 'CATEGORY', 'MEMO', 'OUTFLOW', 'INFLOW'].map(col => (
                 <th
                   key={col}
-                  className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider"
+                  className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider"
                   style={{ color: 'var(--text-faint)' }}
                 >
                   {col}
                 </th>
               ))}
-              <th className="w-10 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>●</th>
+              <th className="w-10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>●</th>
             </tr>
           </thead>
           <tbody>
@@ -664,7 +721,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   onMouseLeave={e => { if (!isSelected && !isChecked) e.currentTarget.style.background = isFuture ? 'rgba(56,189,248,0.05)' : '' }}
                 >
                   {/* Checkbox */}
-                  <td className="px-3 py-3 text-center" onClick={e => toggleChecked(tx.id, e)}>
+                  <td className="px-3 py-1.5 text-center" onClick={e => toggleChecked(tx.id, e)}>
                     <input
                       type="checkbox"
                       readOnly
@@ -674,7 +731,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* DATE */}
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-1.5">
                     {isSelected ? (
                       <div className="relative" ref={datePickerRef} onClick={e => e.stopPropagation()}>
                         <button
@@ -847,7 +904,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* PAYEE */}
-                  <td className="px-3 py-3 max-w-[180px]">
+                  <td className="px-3 py-1.5 max-w-[180px]">
                     {isSelected ? (
                       <input
                         value={editDraft.payee ?? ''}
@@ -865,7 +922,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* CATEGORY */}
-                  <td className="px-3 py-3 max-w-[200px]">
+                  <td className="px-3 py-1.5 max-w-[200px]">
                     {isSelected ? (
                       <div className="relative" ref={categoryPickerRef} onClick={e => e.stopPropagation()}>
                         <button
@@ -906,7 +963,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* MEMO */}
-                  <td className="px-3 py-3 max-w-[160px]">
+                  <td className="px-3 py-1.5 max-w-[160px]">
                     {isSelected ? (
                       <input
                         value={editDraft.memo ?? ''}
@@ -922,7 +979,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* OUTFLOW */}
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     {isSelected ? (
                       <input
                         value={editDraft.outflow != null ? editDraft.outflow : ''}
@@ -944,7 +1001,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* INFLOW */}
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     {isSelected ? (
                       <input
                         value={editDraft.inflow != null ? editDraft.inflow : ''}
@@ -966,7 +1023,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   </td>
 
                   {/* Cleared / Reconciled toggle */}
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-3 py-1.5 text-center">
                     {isReconciled ? (
                       <span
                         title="Reconciled — locked"
