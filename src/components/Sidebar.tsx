@@ -109,6 +109,7 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
         <div className="px-3 pb-3 space-y-1">
           {[
             { id: 'budget', label: 'Budget', icon: '$' },
+            { id: 'credit', label: 'Credit', icon: '💳' },
           ].map(item => (
             <button
               key={item.id}

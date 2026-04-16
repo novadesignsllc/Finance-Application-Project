@@ -5,6 +5,8 @@ import BudgetHeader from './components/BudgetHeader'
 import BudgetTable from './components/BudgetTable'
 import InspectorPanel from './components/InspectorPanel'
 import TransactionView from './components/TransactionView'
+import CreditView from './components/CreditView'
+import type { CreditPlan } from './components/CreditView'
 import LoginPage from './components/LoginPage'
 import { supabase } from './lib/supabase'
 import { loadAll, seedDefaultBudget, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction } from './lib/db'
@@ -77,6 +79,10 @@ function BudgetApp() {
   const [newBalance, setNewBalance] = useState('')
   const [newType, setNewType] = useState('checking')
   const [loading, setLoading] = useState(true)
+  const [creditPlans, setCreditPlans] = useState<Record<string, CreditPlan>>(() => {
+    try { const s = localStorage.getItem('creditPlans'); return s ? JSON.parse(s) : {} }
+    catch { return {} }
+  })
   const isResizing = useRef(false)
   const userId = useRef<string | null>(null)
   const dataLoaded = useRef(false)
@@ -472,12 +478,36 @@ function BudgetApp() {
                   }}
                 />
               </div>
+            ) : activeView === 'credit' ? (
+              <CreditView
+                accounts={accounts}
+                closedAccountIds={closedAccountIds}
+                transactions={transactions}
+                budgetGroupsWithActivity={budgetGroupsWithActivity}
+                onAssignedChange={onAssignedChange}
+                moneyToBudget={moneyToBudget}
+                budgetMonth={budgetMonth}
+                onPrev={prevMonth}
+                onNext={nextMonth}
+                onGoToCurrent={() => setBudgetMonth({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 })}
+                futureBudgeted={futureBudgeted}
+                onResetAssigned={onResetAssigned}
+                creditPlans={creditPlans}
+                onCreditPlanChange={(id, plan) => {
+                  setCreditPlans(prev => {
+                    const next = { ...prev, [id]: plan }
+                    localStorage.setItem('creditPlans', JSON.stringify(next))
+                    return next
+                  })
+                }}
+                gradientColors={gradientColors}
+              />
             ) : (
               <>
                 <BudgetTable
                   selectedId={selectedCategoryId}
                   onSelect={id => setSelectedCategoryId(prev => prev === id ? null : id)}
-                  groups={budgetGroupsWithActivity}
+                  groups={budgetGroupsWithActivity.filter(g => g.id !== CC_GROUP_ID)}
                   onGroupsChange={setBudgetGroups}
                   onAssignedChange={onAssignedChange}
                   ccGroupId={CC_GROUP_ID}
