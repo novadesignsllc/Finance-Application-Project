@@ -436,7 +436,7 @@ function BudgetApp() {
           className="flex flex-col h-full overflow-hidden"
           style={{ background: 'var(--bg-main)', borderRadius: '10px' }}
         >
-          {!selectedAccountId && (
+          {!selectedAccountId && activeView !== 'credit' && (
             <BudgetHeader
               budgetMonth={budgetMonth}
               onPrev={prevMonth}
