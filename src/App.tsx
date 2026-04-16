@@ -456,6 +456,7 @@ function BudgetApp() {
                     if (userId.current) setAccountClosed(id, true).catch(console.error)
                   }}
                   budgetGroups={budgetGroups}
+                  gradientColors={gradientColors}
                   onRenameAccount={(id, name) => {
                     setAccounts(prev => prev.map(a => a.id === id ? { ...a, name } : a))
                     if (userId.current) {

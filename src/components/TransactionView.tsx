@@ -39,13 +39,17 @@ interface TransactionViewProps {
   onDeleteAccount: (id: string) => void
   onRenameAccount: (id: string, name: string) => void
   budgetGroups: CategoryGroup[]
+  gradientColors: string[]
 }
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
 
-export default function TransactionView({ accountId, accounts, transactions, onTransactionsChange, onCloseAccount, onDeleteAccount, onRenameAccount, budgetGroups }: TransactionViewProps) {
+export default function TransactionView({ accountId, accounts, transactions, onTransactionsChange, onCloseAccount, onDeleteAccount, onRenameAccount, budgetGroups, gradientColors }: TransactionViewProps) {
+  const gradient = gradientColors.length === 1
+    ? gradientColors[0]
+    : `linear-gradient(135deg, ${gradientColors.join(', ')})`
   const allCategories = [
     { group: 'Inflow', items: ['Money To Budget'] },
     ...budgetGroups
@@ -641,7 +645,7 @@ export default function TransactionView({ accountId, accounts, transactions, onT
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-all active:scale-95"
           style={{
             borderRadius: '12px',
-            background: 'linear-gradient(135deg, #7c3aed, #2563eb)',
+            background: gradient,
             boxShadow: '0 4px 14px rgba(109,40,217,0.35)',
             color: 'white',
           }}
