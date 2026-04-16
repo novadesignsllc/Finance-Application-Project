@@ -399,7 +399,10 @@ export default function TransactionView({ accountId, accounts, transactions, onT
             }}
           >
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-2xl">🔒</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
               <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                 Reconcile account?
               </h2>
@@ -1089,11 +1092,11 @@ export default function TransactionView({ accountId, accounts, transactions, onT
                   {/* Cleared / Reconciled toggle */}
                   <td className="px-3 py-1.5 text-center">
                     {isReconciled ? (
-                      <span
-                        title="Reconciled — locked"
-                        style={{ fontSize: '15px', lineHeight: 1, color: '#34d399', display: 'inline-block' }}
-                      >
-                        🔒
+                      <span title="Reconciled — locked" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
                       </span>
                     ) : (
                       <button
