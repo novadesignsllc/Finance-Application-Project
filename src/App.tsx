@@ -206,9 +206,12 @@ function BudgetApp() {
     const ccPaymentMap = new Map<string, string>()
     accounts.filter(a => a.type === 'credit').forEach(a => ccPaymentMap.set(`cc-payment-${a.id}`, a.id))
 
-    return budgetGroups.map(g => ({
-      ...g,
-      categories: g.categories.map(c => {
+    // Build sidebar account order for CC category sorting
+    const accountOrder = new Map<string, number>()
+    accounts.forEach((a, i) => accountOrder.set(a.id, i))
+
+    return budgetGroups.map(g => {
+      const computedCats = g.categories.map(c => {
         let carryover = 0
         let assigned = 0
         let activity = 0
@@ -263,8 +266,19 @@ function BudgetApp() {
         }
 
         return { ...c, assigned, activity, available, overspent: available < 0, planMet }
-      }),
-    }))
+      })
+
+      // Keep CC payment categories in sidebar account order
+      if (g.id === CC_GROUP_ID) {
+        computedCats.sort((a, b) => {
+          const aAccId = a.id.replace('cc-payment-', '')
+          const bAccId = b.id.replace('cc-payment-', '')
+          return (accountOrder.get(aAccId) ?? 999) - (accountOrder.get(bAccId) ?? 999)
+        })
+      }
+
+      return { ...g, categories: computedCats }
+    })
   }, [budgetGroups, transactions, budgetMonth, monthlyAssigned, monthSequence, accounts])
 
   const selectedCategory = budgetGroupsWithActivity.flatMap(g => g.categories).find(c => c.id === selectedCategoryId) ?? null
