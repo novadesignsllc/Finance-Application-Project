@@ -183,17 +183,10 @@ function BudgetApp() {
           if (tx.outflow === null) return b
           const parts = tx.date.split('/')
           const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`
-          const freq = (tx.repeat as BillFrequency) || b.frequency
-          // Only update if something actually changed (prevents loops after bill→tx sync)
-          if (
-            tx.payee === b.name &&
-            tx.outflow === b.amount &&
-            tx.accountId === b.accountId &&
-            freq === b.frequency &&
-            isoDate === b.dueDate
-          ) return b
+          // Only amount and date are user-editable from the transaction side
+          if (tx.outflow === b.amount && isoDate === b.dueDate) return b
           anyUpdated = true
-          return { ...b, name: tx.payee, amount: tx.outflow, accountId: tx.accountId, frequency: freq, dueDate: isoDate }
+          return { ...b, amount: tx.outflow, dueDate: isoDate }
         }),
       }))
       if (anyUpdated) toastNeeded = true

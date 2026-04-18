@@ -728,7 +728,7 @@ export default function AllTransactionsView({ accounts, transactions, onTransact
 
                   {/* PAYEE */}
                   <td className="px-3 py-1.5 max-w-[160px]">
-                    {isSelected ? (
+                    {isSelected && !isBillLinked ? (
                       <input
                         value={editDraft.payee ?? ''}
                         onChange={e => setEditDraft(d => ({ ...d, payee: e.target.value }))}
