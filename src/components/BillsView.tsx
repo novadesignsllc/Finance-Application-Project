@@ -79,7 +79,7 @@ interface BillRowProps {
   gradientColors: string[]
 }
 
-function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, onDelete, accounts, gradientColors }: BillRowProps) {
+function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, accounts, gradientColors }: BillRowProps) {
   const gradient = gradientColors.length === 1
     ? gradientColors[0]
     : `linear-gradient(135deg, ${gradientColors.join(', ')})`
@@ -121,7 +121,6 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, onDe
     onSave({ ...bill, emoji, name: name.trim() || 'Untitled', amount: parseFloat(amount) || 0, frequency, accountId, dueDate })
   }
 
-  const freqConfig = FREQ_CONFIG[frequency]
   const accountName = accounts.find(a => a.id === accountId)?.name
 
   if (!isSelected) {
@@ -469,10 +468,6 @@ interface BillsViewProps {
 }
 
 export default function BillsView({ billGroups, onBillGroupsChange, accounts, gradientColors }: BillsViewProps) {
-  const gradient = gradientColors.length === 1
-    ? gradientColors[0]
-    : `linear-gradient(135deg, ${gradientColors.join(', ')})`
-
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [addingGroup, setAddingGroup] = useState(false)
@@ -528,7 +523,6 @@ export default function BillsView({ billGroups, onBillGroupsChange, accounts, gr
       accountId: '',
       frequency: 'monthly',
       amount: 0,
-      category: '',
       dueDate: '',
     }
     updateGroups(gs => gs.map(g => g.id === groupId ? { ...g, bills: [newBill, ...g.bills] } : g))
