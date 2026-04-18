@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Account } from './Sidebar'
 import type { Bill, BillGroup, BillFrequency } from '../data/billData'
 import { toMonthly, FREQ_CONFIG, EMOJI_PRESETS, getNextPaymentDate, formatNextDate, nextDateUrgency } from '../data/billData'
@@ -352,6 +352,7 @@ interface BillGroupSectionProps {
   pendingId: string | null
   onToggleCollapse: () => void
   onRename: (name: string) => void
+  onReorderBills: (bills: Bill[]) => void
   onSelectBill: (id: string) => void
   onSaveBill: (b: Bill) => void
   onCancelBill: () => void
@@ -361,12 +362,15 @@ interface BillGroupSectionProps {
 }
 
 function BillGroupSection({
-  group, selectedId, pendingId, onToggleCollapse, onRename,
+  group, selectedId, pendingId, onToggleCollapse, onRename, onReorderBills,
   onSelectBill, onSaveBill, onCancelBill, onDeleteBill, accounts, gradientColors,
 }: BillGroupSectionProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(group.name)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const dragIdx = useRef<number | null>(null)
 
   const monthlyTotal = group.bills.reduce((s, b) => s + toMonthly(b.amount, b.frequency), 0)
 
@@ -378,6 +382,29 @@ function BillGroupSection({
   useEffect(() => {
     if (editingName) inputRef.current?.focus()
   }, [editingName])
+
+  const onDragStart = useCallback((idx: number) => {
+    dragIdx.current = idx
+    setDraggingIdx(idx)
+  }, [])
+
+  const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault()
+    if (dragIdx.current === null || dragIdx.current === idx) return
+    setDragOverIdx(idx)
+    const next = [...group.bills]
+    const [moved] = next.splice(dragIdx.current, 1)
+    next.splice(idx, 0, moved)
+    dragIdx.current = idx
+    setDraggingIdx(idx)
+    onReorderBills(next)
+  }, [group.bills, onReorderBills])
+
+  const onDragEnd = useCallback(() => {
+    dragIdx.current = null
+    setDraggingIdx(null)
+    setDragOverIdx(null)
+  }, [])
 
   return (
     <div>
@@ -432,20 +459,33 @@ function BillGroupSection({
       {/* Bills (accordion) */}
       <div style={{ display: 'grid', gridTemplateRows: group.collapsed ? '0fr' : '1fr', transition: 'grid-template-rows 0.22s ease' }}>
         <div style={{ overflow: 'hidden' }}>
-          {group.bills.map(bill => (
-            <BillRow
+          {group.bills.map((bill, idx) => (
+            <div
               key={bill.id}
-              bill={bill}
-              isSelected={selectedId === bill.id}
-              isPending={pendingId === bill.id}
-              onSelect={() => onSelectBill(bill.id)}
-              onSave={onSaveBill}
-              onCancel={onCancelBill}
-              onDelete={() => onDeleteBill(bill.id)}
-              accounts={accounts}
-
-              gradientColors={gradientColors}
-            />
+              draggable={selectedId !== bill.id}
+              onDragStart={e => { e.stopPropagation(); onDragStart(idx) }}
+              onDragOver={e => { e.stopPropagation(); onDragOver(e, idx) }}
+              onDragEnd={e => { e.stopPropagation(); onDragEnd() }}
+              style={{
+                opacity: draggingIdx === idx ? 0.4 : 1,
+                outline: dragOverIdx === idx && draggingIdx !== idx ? '2px solid rgba(109,40,217,0.5)' : 'none',
+                borderRadius: '4px',
+                transition: 'opacity 0.15s ease',
+                cursor: selectedId === bill.id ? 'default' : 'grab',
+              }}
+            >
+              <BillRow
+                bill={bill}
+                isSelected={selectedId === bill.id}
+                isPending={pendingId === bill.id}
+                onSelect={() => onSelectBill(bill.id)}
+                onSave={onSaveBill}
+                onCancel={onCancelBill}
+                onDelete={() => onDeleteBill(bill.id)}
+                accounts={accounts}
+                gradientColors={gradientColors}
+              />
+            </div>
           ))}
           {group.bills.length === 0 && !group.collapsed && (
             <div className="px-4 py-5 text-center">
@@ -592,6 +632,7 @@ export default function BillsView({ billGroups, onBillGroupsChange, accounts, gr
               pendingId={pendingId}
               onToggleCollapse={() => updateGroups(gs => gs.map(g => g.id === group.id ? { ...g, collapsed: !g.collapsed } : g))}
               onRename={name => updateGroups(gs => gs.map(g => g.id === group.id ? { ...g, name } : g))}
+              onReorderBills={bills => updateGroups(gs => gs.map(g => g.id === group.id ? { ...g, bills } : g))}
               onSelectBill={handleSelectBill}
               onSaveBill={handleSaveBill}
               onCancelBill={handleCancelBill}
