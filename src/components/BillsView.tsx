@@ -263,10 +263,10 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, acco
 
         {/* Amount */}
         <div
-          className="flex items-center rounded-xl overflow-hidden flex-shrink-0"
-          style={{ background: 'var(--bg-hover-strong)', border: '1px solid rgba(109,40,217,0.4)', width: '116px' }}
+          className="flex items-center rounded-xl flex-shrink-0"
+          style={{ background: 'var(--bg-hover-strong)', border: '1px solid rgba(109,40,217,0.4)', width: '120px', overflow: 'hidden' }}
         >
-          <span className="pl-3 pr-1 text-sm" style={{ color: 'var(--text-faint)' }}>$</span>
+          <span className="pl-2.5 pr-0.5 text-sm flex-shrink-0" style={{ color: 'var(--text-faint)' }}>$</span>
           <input
             type="number"
             min="0"
@@ -275,8 +275,8 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, acco
             onChange={e => setAmount(e.target.value)}
             placeholder="0.00"
             onClick={e => e.stopPropagation()}
-            className="flex-1 py-1.5 pr-3 text-sm text-right outline-none bg-transparent"
-            style={{ color: 'var(--text-primary)' }}
+            className="flex-1 py-1.5 pr-2.5 text-sm outline-none bg-transparent"
+            style={{ color: 'var(--text-primary)', minWidth: 0 }}
           />
         </div>
       </div>
@@ -506,6 +506,7 @@ interface BillsViewProps {
   billGroups: BillGroup[]
   onBillGroupsChange: (groups: BillGroup[]) => void
   onCreateTransaction: (tx: Transaction) => void
+  onUpdateTransaction: (id: string, updates: Partial<Transaction>) => void
   accounts: Account[]
   gradientColors: string[]
 }
@@ -514,14 +515,20 @@ interface BillsViewProps {
 const isBillComplete = (b: Bill) =>
   b.name.trim() !== '' && b.accountId !== '' && b.amount > 0 && b.dueDate !== ''
 
-export default function BillsView({ billGroups, onBillGroupsChange, onCreateTransaction, accounts, gradientColors }: BillsViewProps) {
+const formatDateForTx = (d: Date): string => {
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}/${dd}/${d.getFullYear()}`
+}
+
+export default function BillsView({ billGroups, onBillGroupsChange, onCreateTransaction, onUpdateTransaction, accounts, gradientColors }: BillsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingBill, setAddingBill] = useState(false)
   const [newBillGroupId, setNewBillGroupId] = useState('')
-  const [toast, setToast] = useState<{ accountName: string } | null>(null)
+  const [toast, setToast] = useState<{ accountName: string; action: 'created' | 'updated' } | null>(null)
 
   // Auto-dismiss toast after 4 s
   useEffect(() => {
@@ -550,30 +557,40 @@ export default function BillsView({ billGroups, onBillGroupsChange, onCreateTran
   const handleSaveBill = (updated: Bill) => {
     let billToSave = updated
 
-    // Create a linked transaction the first time ALL required fields are present
-    if (isBillComplete(updated) && !updated.linkedTransactionId) {
+    if (isBillComplete(updated)) {
       const nextDate = getNextPaymentDate(updated.dueDate, updated.frequency)
       if (nextDate) {
-        const txId = crypto.randomUUID()
-        const mm = String(nextDate.getMonth() + 1).padStart(2, '0')
-        const dd = String(nextDate.getDate()).padStart(2, '0')
-        const yyyy = nextDate.getFullYear()
-        const tx: Transaction = {
-          id: txId,
-          accountId: updated.accountId,
-          date: `${mm}/${dd}/${yyyy}`,
-          payee: updated.name,
-          category: updated.name,   // matches the auto-created Bills budget category
-          memo: '',
-          outflow: updated.amount,
-          inflow: null,
-          cleared: false,
-          repeat: updated.frequency,
-        }
-        onCreateTransaction(tx)
-        billToSave = { ...updated, linkedTransactionId: txId }
         const accountName = accounts.find(a => a.id === updated.accountId)?.name ?? 'your account'
-        setToast({ accountName })
+        if (!updated.linkedTransactionId) {
+          // First time all fields complete — create a linked transaction
+          const txId = crypto.randomUUID()
+          const tx: Transaction = {
+            id: txId,
+            accountId: updated.accountId,
+            date: formatDateForTx(nextDate),
+            payee: updated.name,
+            category: updated.name,
+            memo: '',
+            outflow: updated.amount,
+            inflow: null,
+            cleared: false,
+            repeat: updated.frequency,
+          }
+          onCreateTransaction(tx)
+          billToSave = { ...updated, linkedTransactionId: txId }
+          setToast({ accountName, action: 'created' })
+        } else {
+          // Already linked — sync changes to the existing transaction
+          onUpdateTransaction(updated.linkedTransactionId, {
+            payee: updated.name,
+            category: updated.name,
+            outflow: updated.amount,
+            accountId: updated.accountId,
+            repeat: updated.frequency,
+            date: formatDateForTx(nextDate),
+          })
+          setToast({ accountName, action: 'updated' })
+        }
       }
     }
 
@@ -802,8 +819,13 @@ export default function BillsView({ billGroups, onBillGroupsChange, onCreateTran
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Linked transaction created</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>Added to <span style={{ color: 'var(--text-secondary)' }}>{toast.accountName}</span></p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Linked transaction {toast.action}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>
+              {toast.action === 'created' ? 'Added to' : 'Synced with'}{' '}
+              <span style={{ color: 'var(--text-secondary)' }}>{toast.accountName}</span>
+            </p>
           </div>
           <button
             onClick={() => setToast(null)}

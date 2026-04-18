@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import Sidebar from './components/Sidebar'
 import type { Account } from './components/Sidebar'
 import BudgetHeader from './components/BudgetHeader'
@@ -115,6 +116,7 @@ function BudgetApp() {
   const [loading, setLoading] = useState(true)
   const [dataReady, setDataReady] = useState(false)
   const [billGroups, setBillGroups] = useState<BillGroup[]>(mockBillGroups)
+  const [appToast, setAppToast] = useState<{ title: string; subtitle: string } | null>(null)
 
   // When bills change, archive budget categories for deleted bills that have transactions
   const handleBillGroupsChange = (newGroups: BillGroup[]) => {
@@ -144,6 +146,56 @@ function BudgetApp() {
 
     setBillGroups(newGroups)
   }
+
+  // Auto-dismiss app-level toast
+  useEffect(() => {
+    if (!appToast) return
+    const t = setTimeout(() => setAppToast(null), 4000)
+    return () => clearTimeout(t)
+  }, [appToast])
+
+  // Update a single transaction by id (used by BillsView to sync bill changes → linked tx)
+  const handleUpdateTransaction = useCallback((id: string, updates: Partial<Transaction>) => {
+    setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, ...updates } : tx))
+  }, [])
+
+  // Transaction → Bill sync: when a linked transaction is edited or deleted, reflect it in the bill
+  useEffect(() => {
+    if (!dataReady) return
+    let toastNeeded = false
+    setBillGroups(prevBills => {
+      let anyUpdated = false
+      const next = prevBills.map(g => ({
+        ...g,
+        bills: g.bills.map(b => {
+          if (!b.linkedTransactionId) return b
+          const tx = transactions.find(t => t.id === b.linkedTransactionId)
+          if (!tx) {
+            // Linked transaction was deleted — unlink so next save can create a fresh one
+            anyUpdated = true
+            return { ...b, linkedTransactionId: undefined }
+          }
+          if (tx.outflow === null) return b
+          const parts = tx.date.split('/')
+          const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`
+          const freq = (tx.repeat as BillFrequency) || b.frequency
+          // Only update if something actually changed (prevents loops after bill→tx sync)
+          if (
+            tx.payee === b.name &&
+            tx.outflow === b.amount &&
+            tx.accountId === b.accountId &&
+            freq === b.frequency &&
+            isoDate === b.dueDate
+          ) return b
+          anyUpdated = true
+          return { ...b, name: tx.payee, amount: tx.outflow, accountId: tx.accountId, frequency: freq, dueDate: isoDate }
+        }),
+      }))
+      if (anyUpdated) toastNeeded = true
+      return anyUpdated ? next : prevBills
+    })
+    if (toastNeeded) setAppToast({ title: 'Bill synced', subtitle: 'Transaction changes reflected in your bill' })
+  }, [transactions, dataReady])
 
   const isResizing = useRef(false)
   const userId = useRef<string | null>(null)
@@ -809,6 +861,7 @@ function BudgetApp() {
                   billGroups={billGroups}
                   onBillGroupsChange={handleBillGroupsChange}
                   onCreateTransaction={tx => setTransactions(prev => [...prev, tx])}
+                  onUpdateTransaction={handleUpdateTransaction}
                   accounts={accounts.filter(a => !closedAccountIds.has(a.id))}
                   gradientColors={gradientColors}
                 />
@@ -842,6 +895,43 @@ function BudgetApp() {
           </div>
         </div>
       </div>
+
+      {/* App-level toast — transaction→bill sync notification */}
+      {appToast && createPortal(
+        <div
+          className="flex items-start gap-3 px-4 py-3.5 rounded-2xl"
+          style={{
+            position: 'fixed',
+            bottom: '28px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            background: 'var(--bg-surface)',
+            border: '1px solid rgba(52,211,153,0.4)',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+            minWidth: '280px',
+            maxWidth: '360px',
+          }}
+        >
+          <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7l3.5 3.5L12 3" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{appToast.title}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>{appToast.subtitle}</p>
+          </div>
+          <button
+            onClick={() => setAppToast(null)}
+            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-sm transition-all"
+            style={{ color: 'var(--text-faint)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >✕</button>
+        </div>,
+        document.body
+      )}
 
       {/* Add Account Modal */}
       {showAddAccount && (
