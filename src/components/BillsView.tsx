@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { Account } from './Sidebar'
+import type { Transaction } from '../data/mockData'
 import type { Bill, BillGroup, BillFrequency } from '../data/billData'
 import { toMonthly, FREQ_CONFIG, EMOJI_PRESETS, getNextPaymentDate, formatNextDate, nextDateUrgency } from '../data/billData'
 
@@ -503,17 +505,30 @@ function BillGroupSection({
 interface BillsViewProps {
   billGroups: BillGroup[]
   onBillGroupsChange: (groups: BillGroup[]) => void
+  onCreateTransaction: (tx: Transaction) => void
   accounts: Account[]
   gradientColors: string[]
 }
 
-export default function BillsView({ billGroups, onBillGroupsChange, accounts, gradientColors }: BillsViewProps) {
+// A bill is "complete" when it has everything needed to generate a transaction
+const isBillComplete = (b: Bill) =>
+  b.name.trim() !== '' && b.accountId !== '' && b.amount > 0 && b.dueDate !== ''
+
+export default function BillsView({ billGroups, onBillGroupsChange, onCreateTransaction, accounts, gradientColors }: BillsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingBill, setAddingBill] = useState(false)
   const [newBillGroupId, setNewBillGroupId] = useState('')
+  const [toast, setToast] = useState<{ accountName: string } | null>(null)
+
+  // Auto-dismiss toast after 4 s
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 4000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const allBills = billGroups.flatMap(g => g.bills)
   const totalMonthly = allBills.reduce((s, b) => s + toMonthly(b.amount, b.frequency), 0)
@@ -533,7 +548,36 @@ export default function BillsView({ billGroups, onBillGroupsChange, accounts, gr
   }
 
   const handleSaveBill = (updated: Bill) => {
-    updateGroups(gs => gs.map(g => ({ ...g, bills: g.bills.map(b => b.id === updated.id ? updated : b) })))
+    let billToSave = updated
+
+    // Create a linked transaction the first time ALL required fields are present
+    if (isBillComplete(updated) && !updated.linkedTransactionId) {
+      const nextDate = getNextPaymentDate(updated.dueDate, updated.frequency)
+      if (nextDate) {
+        const txId = crypto.randomUUID()
+        const mm = String(nextDate.getMonth() + 1).padStart(2, '0')
+        const dd = String(nextDate.getDate()).padStart(2, '0')
+        const yyyy = nextDate.getFullYear()
+        const tx: Transaction = {
+          id: txId,
+          accountId: updated.accountId,
+          date: `${mm}/${dd}/${yyyy}`,
+          payee: updated.name,
+          category: updated.name,   // matches the auto-created Bills budget category
+          memo: '',
+          outflow: updated.amount,
+          inflow: null,
+          cleared: false,
+          repeat: updated.frequency,
+        }
+        onCreateTransaction(tx)
+        billToSave = { ...updated, linkedTransactionId: txId }
+        const accountName = accounts.find(a => a.id === updated.accountId)?.name ?? 'your account'
+        setToast({ accountName })
+      }
+    }
+
+    updateGroups(gs => gs.map(g => ({ ...g, bills: g.bills.map(b => b.id === billToSave.id ? billToSave : b) })))
     setPendingId(null)
     setSelectedId(null)
   }
@@ -581,6 +625,7 @@ export default function BillsView({ billGroups, onBillGroupsChange, accounts, gr
   }
 
   return (
+    <>
     <div className="flex flex-col h-full min-h-0" style={{ background: 'var(--bg-main)' }}>
 
       {/* Header */}
@@ -733,5 +778,43 @@ export default function BillsView({ billGroups, onBillGroupsChange, accounts, gr
         </div>
       </div>
     </div>
+
+      {/* Toast — linked transaction created */}
+      {toast && createPortal(
+        <div
+          className="flex items-start gap-3 px-4 py-3.5 rounded-2xl"
+          style={{
+            position: 'fixed',
+            bottom: '28px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            background: 'var(--bg-surface)',
+            border: '1px solid rgba(52,211,153,0.4)',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+            minWidth: '280px',
+            maxWidth: '360px',
+          }}
+        >
+          <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7l3.5 3.5L12 3" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Linked transaction created</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>Added to <span style={{ color: 'var(--text-secondary)' }}>{toast.accountName}</span></p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-sm transition-all"
+            style={{ color: 'var(--text-faint)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >✕</button>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }

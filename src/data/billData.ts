@@ -8,6 +8,7 @@ export interface Bill {
   frequency: BillFrequency
   amount: number
   dueDate: string     // YYYY-MM-DD anchor date (last/first due date)
+  linkedTransactionId?: string  // set once a transaction has been auto-created
 }
 
 export function getNextPaymentDate(dueDate: string, frequency: BillFrequency): Date | null {

@@ -808,6 +808,7 @@ function BudgetApp() {
                 <BillsView
                   billGroups={billGroups}
                   onBillGroupsChange={handleBillGroupsChange}
+                  onCreateTransaction={tx => setTransactions(prev => [...prev, tx])}
                   accounts={accounts.filter(a => !closedAccountIds.has(a.id))}
                   gradientColors={gradientColors}
                 />
