@@ -180,6 +180,17 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, acco
         <span className="flex-shrink-0 text-sm font-semibold text-right" style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', width: '96px' }}>
           {bill.amount > 0 ? fmtMonthly(bill.amount, bill.frequency) : <span style={{ color: 'var(--text-faint)' }}>—</span>}
         </span>
+
+        {/* Linked indicator */}
+        <div className="flex-shrink-0 flex items-center justify-center" style={{ width: '28px' }}>
+          {bill.linkedTransactionId && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <title>Linked to transaction</title>
+              <path d="M23 4v6h-6" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
       </div>
     )
   }
@@ -662,10 +673,10 @@ export default function BillsView({ billGroups, onBillGroupsChange, onCreateTran
         {/* Center: total */}
         <div className="flex-1 flex justify-center items-center">
           <div className="text-center">
-            <div className="text-xl font-bold" style={{ color: '#34d399' }}>
+            <div className="text-xl font-bold" style={{ color: '#60a5fa' }}>
               {fmt(totalMonthly)}
             </div>
-            <div className="text-xs font-medium" style={{ color: '#34d399', opacity: 0.8 }}>
+            <div className="text-xs font-medium" style={{ color: '#60a5fa', opacity: 0.8 }}>
               Total needed per month
             </div>
           </div>
@@ -807,15 +818,15 @@ export default function BillsView({ billGroups, onBillGroupsChange, onCreateTran
             transform: 'translateX(-50%)',
             zIndex: 9999,
             background: 'var(--bg-surface)',
-            border: '1px solid rgba(52,211,153,0.4)',
+            border: '1px solid rgba(96,165,250,0.4)',
             boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
             minWidth: '280px',
             maxWidth: '360px',
           }}
         >
-          <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}>
+          <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)' }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7l3.5 3.5L12 3" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 7l3.5 3.5L12 3" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
           <div className="flex-1 min-w-0">

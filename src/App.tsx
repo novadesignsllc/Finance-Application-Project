@@ -118,6 +118,11 @@ function BudgetApp() {
   const [billGroups, setBillGroups] = useState<BillGroup[]>(mockBillGroups)
   const [appToast, setAppToast] = useState<{ title: string; subtitle: string } | null>(null)
 
+  const billLinkedTxIds = useMemo(
+    () => new Set(billGroups.flatMap(g => g.bills.flatMap(b => b.linkedTransactionId ? [b.linkedTransactionId] : []))),
+    [billGroups]
+  )
+
   // When bills change, archive budget categories for deleted bills that have transactions
   const handleBillGroupsChange = (newGroups: BillGroup[]) => {
     const oldBillIds = new Set(billGroups.flatMap(g => g.bills.map(b => b.id)))
@@ -825,6 +830,7 @@ function BudgetApp() {
                   }}
                   budgetGroups={budgetGroups}
                   gradientColors={gradientColors}
+                  billLinkedTxIds={billLinkedTxIds}
                   onRenameAccount={(id, name) => {
                     setAccounts(prev => prev.map(a => a.id === id ? { ...a, name } : a))
                     if (userId.current) {
@@ -874,6 +880,7 @@ function BudgetApp() {
                   onTransactionsChange={setTransactions}
                   budgetGroups={budgetGroups}
                   gradientColors={gradientColors}
+                  billLinkedTxIds={billLinkedTxIds}
                 />
               </div>
             ) : (
@@ -907,15 +914,15 @@ function BudgetApp() {
             transform: 'translateX(-50%)',
             zIndex: 9999,
             background: 'var(--bg-surface)',
-            border: '1px solid rgba(52,211,153,0.4)',
+            border: '1px solid rgba(96,165,250,0.4)',
             boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
             minWidth: '280px',
             maxWidth: '360px',
           }}
         >
-          <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}>
+          <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)' }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7l3.5 3.5L12 3" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 7l3.5 3.5L12 3" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
           <div className="flex-1 min-w-0">

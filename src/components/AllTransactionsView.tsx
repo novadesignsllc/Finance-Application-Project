@@ -36,12 +36,13 @@ interface AllTransactionsViewProps {
   onTransactionsChange: (txs: Transaction[]) => void
   budgetGroups: CategoryGroup[]
   gradientColors: string[]
+  billLinkedTxIds: Set<string>
 }
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
-export default function AllTransactionsView({ accounts, transactions, onTransactionsChange, budgetGroups, gradientColors }: AllTransactionsViewProps) {
+export default function AllTransactionsView({ accounts, transactions, onTransactionsChange, budgetGroups, gradientColors, billLinkedTxIds }: AllTransactionsViewProps) {
   const gradient = gradientColors.length === 1
     ? gradientColors[0]
     : `linear-gradient(135deg, ${gradientColors.join(', ')})`
@@ -519,6 +520,7 @@ export default function AllTransactionsView({ accounts, transactions, onTransact
             )}
             {visibleTx.map(tx => {
               const isSelected = selectedId === tx.id
+              const isBillLinked = billLinkedTxIds.has(tx.id)
               const isChecked = checkedIds.has(tx.id)
               const isReconciled = !!tx.reconciled
               const txParts = tx.date.split('/')
@@ -773,31 +775,60 @@ export default function AllTransactionsView({ accounts, transactions, onTransact
                   {/* CATEGORY */}
                   <td className="px-3 py-1.5 max-w-[180px]">
                     {isSelected ? (
-                      <div ref={categoryPickerRef} onClick={e => e.stopPropagation()}>
-                        <button
-                          ref={categoryBtnRef}
-                          onClick={() => {
-                            setEditCategory(editDraft.category ?? '')
-                            if (!showCategoryPicker && categoryBtnRef.current) {
-                              const r = categoryBtnRef.current.getBoundingClientRect()
-                              setCategoryPickerPos({ top: r.bottom + 4, left: r.left })
-                            }
-                            setShowCategoryPicker(p => !p)
-                          }}
-                          className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-lg w-full text-left"
+                      isBillLinked ? (
+                        // Bill-linked: category is locked, show as read-only badge
+                        <div
+                          className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-lg"
                           style={{
-                            background: 'var(--bg-hover-strong)',
-                            border: '1px solid rgba(109,40,217,0.4)',
-                            color: editDraft.category ? 'var(--text-primary)' : 'var(--text-faint)',
-                            minWidth: '140px',
+                            background: 'rgba(96,165,250,0.1)',
+                            border: '1px solid rgba(96,165,250,0.3)',
+                            color: '#60a5fa',
+                            minWidth: '160px',
+                            cursor: 'default',
                           }}
+                          onClick={e => e.stopPropagation()}
                         >
-                          <span className="flex-1 truncate">{editDraft.category ? categoryLabel(editDraft.category) : 'Pick a category…'}</span>
-                          <span className="text-xs" style={{ color: 'var(--text-faint)' }}>▾</span>
-                        </button>
-                      </div>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                            <path d="M23 4v6h-6" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span className="flex-1 truncate text-xs">{editDraft.category ? categoryLabel(editDraft.category) : '—'}</span>
+                        </div>
+                      ) : (
+                        <div ref={categoryPickerRef} onClick={e => e.stopPropagation()}>
+                          <button
+                            ref={categoryBtnRef}
+                            onClick={() => {
+                              setEditCategory(editDraft.category ?? '')
+                              if (!showCategoryPicker && categoryBtnRef.current) {
+                                const r = categoryBtnRef.current.getBoundingClientRect()
+                                setCategoryPickerPos({ top: r.bottom + 4, left: r.left })
+                              }
+                              setShowCategoryPicker(p => !p)
+                            }}
+                            className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-lg w-full text-left"
+                            style={{
+                              background: 'var(--bg-hover-strong)',
+                              border: '1px solid rgba(109,40,217,0.4)',
+                              color: editDraft.category ? 'var(--text-primary)' : 'var(--text-faint)',
+                              minWidth: '140px',
+                            }}
+                          >
+                            <span className="flex-1 truncate">{editDraft.category ? categoryLabel(editDraft.category) : 'Pick a category…'}</span>
+                            <span className="text-xs" style={{ color: 'var(--text-faint)' }}>▾</span>
+                          </button>
+                        </div>
+                      )
                     ) : tx.category ? (
-                      <span className="text-sm truncate block" style={{ color: 'var(--text-secondary)' }}>{categoryLabel(tx.category)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>{categoryLabel(tx.category)}</span>
+                        {isBillLinked && (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                            <path d="M23 4v6h-6" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
                     ) : (
                       <span
                         className="inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg"
