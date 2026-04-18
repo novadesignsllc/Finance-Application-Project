@@ -107,10 +107,49 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
 
         {/* Nav pills */}
         <div className="px-3 pb-3 space-y-1">
-          {[
-            { id: 'budget', label: 'Budget', icon: '$' },
-            { id: 'credit', label: 'Credit', icon: '💳' },
-          ].map(item => (
+          {([
+            {
+              id: 'budget', label: 'Budget',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="3.5" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.25"/>
+                  <path d="M1 6.5h14" stroke="currentColor" strokeWidth="1.25"/>
+                  <circle cx="4.5" cy="9.5" r="1" fill="currentColor"/>
+                  <rect x="7.5" y="9" width="5" height="1" rx="0.5" fill="currentColor" fillOpacity="0.6"/>
+                </svg>
+              ),
+            },
+            {
+              id: 'bills', label: 'Bills',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
+                  <path d="M5 5h4M5 7.5h4M5 10h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                  <circle cx="12.5" cy="12.5" r="2.5" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1"/>
+                  <path d="M11.5 12.5h2M12.5 11.5v2" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                </svg>
+              ),
+            },
+            {
+              id: 'credit', label: 'Debt',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.25"/>
+                  <rect x="1" y="6" width="14" height="2.5" fill="currentColor" fillOpacity="0.3"/>
+                  <rect x="2.5" y="10" width="3.5" height="1.25" rx="0.5" fill="currentColor" fillOpacity="0.7"/>
+                </svg>
+              ),
+            },
+            {
+              id: 'all-transactions', label: 'All Transactions',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="2" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.25"/>
+                  <path d="M4 5.5h8M4 8h8M4 10.5h5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                </svg>
+              ),
+            },
+          ] as { id: string; label: string; icon: React.ReactNode }[]).map(item => (
             <button
               key={item.id}
               onClick={() => { onViewChange(item.id); onAccountSelect(null) }}
@@ -129,7 +168,7 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
                 if (activeView !== item.id) e.currentTarget.style.background = 'transparent'
               }}
             >
-              <span className="text-base leading-none">{item.icon}</span>
+              <span className="flex-shrink-0 leading-none">{item.icon}</span>
               {item.label}
             </button>
           ))}

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import CategoryGroup from './CategoryGroup'
-import type { CategoryGroup as CategoryGroupType } from '../data/mockData'
+import type { CategoryGroup as CategoryGroupType, Transaction } from '../data/mockData'
 
 interface BudgetTableProps {
   selectedId: string | null
@@ -9,9 +9,12 @@ interface BudgetTableProps {
   onGroupsChange: (groups: CategoryGroupType[]) => void
   onAssignedChange: (catId: string, value: number) => void
   ccGroupId?: string
+  billsGroupId?: string
+  transactions: Transaction[]
+  budgetMonth: { year: number; month: number }
 }
 
-export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChange, onAssignedChange, ccGroupId }: BudgetTableProps) {
+export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChange, onAssignedChange, ccGroupId, billsGroupId, transactions, budgetMonth }: BudgetTableProps) {
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingCategory, setAddingCategory] = useState(false)
@@ -30,7 +33,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
 
   const commitAddCategory = () => {
     const name = newCatName.trim()
-    const groupId = newCatGroupId || groups.find(g => g.id !== ccGroupId)?.id
+    const groupId = newCatGroupId || groups.find(g => g.id !== ccGroupId && g.id !== billsGroupId)?.id
     if (name && groupId) {
       onGroupsChange(groups.map(g =>
         g.id === groupId
@@ -48,7 +51,9 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
     e.preventDefault()
     if (dragGroupIdx.current === null || dragGroupIdx.current === idx) return
     const ccIdx = ccGroupId ? groups.findIndex(g => g.id === ccGroupId) : -1
+    const billsIdx = billsGroupId ? groups.findIndex(g => g.id === billsGroupId) : -1
     if (idx === ccIdx || dragGroupIdx.current === ccIdx) return
+    if (idx === billsIdx || dragGroupIdx.current === billsIdx) return
     const next = [...groups]
     const [moved] = next.splice(dragGroupIdx.current, 1)
     next.splice(idx, 0, moved)
@@ -64,7 +69,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto budget-scroll-area" style={{ scrollbarWidth: 'none' }}>
       {/* Column headers */}
       <div
         className="flex items-center gap-2 px-5 py-2.5 sticky top-0 z-10 backdrop-blur-sm"
@@ -75,13 +80,13 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
           Category
         </div>
         <div className="flex items-center flex-shrink-0">
-          <div style={{ width: '128px', textAlign: 'right', paddingRight: '16px' }}>
-            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>Assigned</span>
+          <div style={{ width: '112px' }}>
+            <span className="text-xs font-semibold uppercase tracking-widest block w-full text-right pr-3" style={{ color: 'var(--text-faint)' }}>Allocated</span>
           </div>
-          <div style={{ width: '128px', textAlign: 'right', paddingRight: '16px' }}>
-            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>Activity</span>
+          <div style={{ width: '112px' }}>
+            <span className="text-xs font-semibold uppercase tracking-widest block w-full text-right pr-3" style={{ color: 'var(--text-faint)' }}>Activity</span>
           </div>
-          <div style={{ width: '128px', textAlign: 'right' }}>
+          <div style={{ width: '112px', display: 'flex', justifyContent: 'flex-end', paddingRight: '12px' }}>
             <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>Available</span>
           </div>
         </div>
@@ -101,10 +106,16 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
             onDragEnd={() => { dragGroupIdx.current = null }}
             onEmojiChange={onEmojiChange}
             onAssignedChange={onAssignedChange}
-            isLocked={group.id === ccGroupId}
+            isLocked={group.id === ccGroupId || group.id === billsGroupId}
+            lockedVariant={group.id === billsGroupId ? 'bills' : 'cc'}
             onCategoryReorder={cats => {
               onGroupsChange(groups.map((g, i) => i === idx ? { ...g, categories: cats } : g))
             }}
+            onRenameGroup={name => {
+              onGroupsChange(groups.map((g, i) => i === idx ? { ...g, name } : g))
+            }}
+            transactions={transactions}
+            budgetMonth={budgetMonth}
           />
         ))}
       </div>
@@ -164,7 +175,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
               className="text-xs rounded-lg px-2 py-1 outline-none"
               style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--color-border)' }}
             >
-              {groups.filter(g => g.id !== ccGroupId).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {groups.filter(g => g.id !== ccGroupId && g.id !== billsGroupId).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
             <button onClick={commitAddCategory} className="text-xs font-semibold px-3 py-1 rounded-lg" style={{ background: 'linear-gradient(135deg,#7c3aed,#2563eb)', color: 'white' }}>
               Add
@@ -175,7 +186,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
           </div>
         ) : (
           <button
-            onClick={() => { setNewCatGroupId(groups.find(g => g.id !== ccGroupId)?.id || ''); setAddingCategory(true) }}
+            onClick={() => { setNewCatGroupId(groups.find(g => g.id !== ccGroupId && g.id !== billsGroupId)?.id || ''); setAddingCategory(true) }}
             className="flex items-center gap-2 px-4 py-2.5 w-full text-sm transition-all"
             style={{
               borderRadius: '12px',

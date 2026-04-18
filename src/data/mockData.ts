@@ -1,10 +1,12 @@
-export type PlanType = 'build' | 'savings' | 'spending'
+export type PlanType = 'build' | 'savings' | 'spending' | 'bill'
 
 export interface CategoryPlan {
   type: PlanType
-  monthlyAmount?: number  // build: amount per month; spending: target per month
+  monthlyAmount?: number  // build: amount per month; spending: target per month; bill: monthly-equivalent needed
   goalAmount?: number     // savings: total goal
-  goalDate?: string       // savings: target date (YYYY-MM-DD)
+  goalDate?: string       // savings: target date; bill: anchor due date (YYYY-MM-DD)
+  startDate?: string      // YYYY-MM — month the plan was created (set once, preserved on edit)
+  billFrequency?: string  // bill: frequency string for computing next payment date
   // derived — computed at runtime, not stored
 }
 
@@ -17,7 +19,16 @@ export interface Category {
   available: number
   plan?: CategoryPlan
   overspent?: boolean
-  planMet?: boolean | null
+  planStatus?: 'met' | 'over' | 'under'
+  archived?: boolean        // bill-linked category preserved after bill deletion
+  // CC payment category fields (only present for credit card payment categories)
+  ccStartingBalance?: number                                   // total starting debt for this CC across all time
+  ccStartingUncovered?: number                                 // amount of starting debt not yet covered by assignments
+  ccFunding?: { categoryName: string; amount: number; total: number }[]  // this month's per-category funding breakdown
+  ccFullyFunded?: boolean                                      // whether all CC purchases this month are fully covered by budget categories
+  ccAccountBalance?: number                                    // total card debt right now (all transactions, all time)
+  causingCCUnderfunding?: boolean                             // this category's allocation doesn't fully cover its CC charges this month
+  debtPayoffDate?: string                                      // YYYY-MM-DD target date to pay off this CC (only on CC payment categories)
 }
 
 export interface CategoryGroup {
@@ -86,10 +97,10 @@ export interface Transaction {
 
 export const mockTransactions: Transaction[] = [
   // Starting balances
-  { id: 'sb-citizens',       accountId: 'citizens',       date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Budget', memo: '', outflow: null,    inflow: 3683.99, cleared: true },
-  { id: 'sb-chase-checking', accountId: 'chase-checking', date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Budget', memo: '', outflow: null,    inflow: 1594.70, cleared: true },
-  { id: 'sb-discover',       accountId: 'discover',       date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Budget', memo: '', outflow: 155.33,  inflow: null,    cleared: true },
-  { id: 'sb-chase-sapphire', accountId: 'chase-sapphire', date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Budget', memo: '', outflow: 1042.00, inflow: null,    cleared: true },
+  { id: 'sb-citizens',       accountId: 'citizens',       date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Allocate', memo: '', outflow: null,    inflow: 3683.99, cleared: true },
+  { id: 'sb-chase-checking', accountId: 'chase-checking', date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Allocate', memo: '', outflow: null,    inflow: 1594.70, cleared: true },
+  { id: 'sb-discover',       accountId: 'discover',       date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Allocate', memo: '', outflow: 155.33,  inflow: null,    cleared: true },
+  { id: 'sb-chase-sapphire', accountId: 'chase-sapphire', date: '01/01/2026', payee: 'Starting Balance', category: 'Money To Allocate', memo: '', outflow: 1042.00, inflow: null,    cleared: true },
   // Citizens Bank
   { id: 't1',  accountId: 'citizens',       date: '04/08/2026', payee: 'Whole Foods Market',      category: 'Groceries',              memo: '',                  outflow: 87.43,  inflow: null,    cleared: true  },
   { id: 't2',  accountId: 'citizens',       date: '04/07/2026', payee: 'Shell Gas Station',       category: 'Transportation',         memo: 'Fill up',           outflow: 62.10,  inflow: null,    cleared: true  },

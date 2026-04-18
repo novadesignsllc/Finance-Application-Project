@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import type { CategoryGroup as CategoryGroupType, Category } from '../data/mockData'
+import type { CategoryGroup as CategoryGroupType, Category, Transaction } from '../data/mockData'
 import CategoryRow from './CategoryRow'
 
 interface CategoryGroupProps {
@@ -13,18 +13,32 @@ interface CategoryGroupProps {
   onEmojiChange: (catId: string, emoji: string) => void
   onAssignedChange: (catId: string, value: number) => void
   onCategoryReorder: (cats: Category[]) => void
+  onRenameGroup: (name: string) => void
   isLocked?: boolean
+  lockedVariant?: 'cc' | 'bills'
+  transactions: Transaction[]
+  budgetMonth: { year: number; month: number }
 }
 
 export default function CategoryGroup({
   group, groupIndex, selectedId, onSelect,
   onGroupDragStart, onGroupDragOver, onDragEnd,
-  onEmojiChange, onAssignedChange, onCategoryReorder, isLocked,
+  onEmojiChange, onAssignedChange, onCategoryReorder, onRenameGroup, isLocked, lockedVariant,
+  transactions, budgetMonth,
 }: CategoryGroupProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [draggingCatIdx, setDraggingCatIdx] = useState<number | null>(null)
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState(group.name)
   const dragCatIdx = useRef<number | null>(null)
+
+  const commitRename = () => {
+    const trimmed = nameValue.trim()
+    if (trimmed && trimmed !== group.name) onRenameGroup(trimmed)
+    else setNameValue(group.name)
+    setEditingName(false)
+  }
 
   const onCatDragStart = (idx: number) => {
     dragCatIdx.current = idx
@@ -67,9 +81,11 @@ export default function CategoryGroup({
         background: 'var(--bg-surface)',
         border: isDraggingOver
           ? '1px solid rgba(109,40,217,0.5)'
-          : isLocked
-            ? '1px solid rgba(239,68,68,0.2)'
-            : '1px solid var(--color-border)',
+          : isLocked && lockedVariant === 'bills'
+            ? '1px solid rgba(52,211,153,0.2)'
+            : isLocked
+              ? '1px solid rgba(239,68,68,0.2)'
+              : '1px solid var(--color-border)',
         boxShadow: isDraggingOver
           ? '0 0 0 2px rgba(109,40,217,0.2)'
           : '0 1px 4px rgba(0,0,0,0.12)',
@@ -81,39 +97,93 @@ export default function CategoryGroup({
       <div
         className="flex items-center py-3 transition-all"
         style={{
-          background: isLocked ? 'rgba(239,68,68,0.06)' : 'rgba(109,40,217,0.06)',
+          background: isLocked && lockedVariant === 'bills'
+            ? 'rgba(52,211,153,0.06)'
+            : isLocked
+              ? 'rgba(239,68,68,0.06)'
+              : 'rgba(109,40,217,0.06)',
           borderBottom: collapsed ? 'none' : '1px solid var(--color-border)',
           paddingLeft: '20px',
           paddingRight: '8px',
           borderRadius: collapsed ? '16px' : undefined,
         }}
         onClick={() => setCollapsed(!collapsed)}
-        onMouseEnter={e => (e.currentTarget.style.background = isLocked ? 'rgba(239,68,68,0.1)' : 'rgba(109,40,217,0.1)')}
-        onMouseLeave={e => (e.currentTarget.style.background = isLocked ? 'rgba(239,68,68,0.06)' : 'rgba(109,40,217,0.06)')}
+        onMouseEnter={e => (e.currentTarget.style.background = isLocked && lockedVariant === 'bills' ? 'rgba(52,211,153,0.1)' : isLocked ? 'rgba(239,68,68,0.1)' : 'rgba(109,40,217,0.1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = isLocked && lockedVariant === 'bills' ? 'rgba(52,211,153,0.06)' : isLocked ? 'rgba(239,68,68,0.06)' : 'rgba(109,40,217,0.06)')}
       >
         <div className="w-4 flex-shrink-0" />
-        <div className="flex-1 pl-2 flex items-center gap-2">
-          {isLocked && <span className="text-sm">💳</span>}
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: isLocked ? 'rgba(252,165,165,0.8)' : 'var(--text-secondary)' }}>
-            {group.name}
-          </span>
+        <div className="flex-1 pl-2 flex items-center gap-2" onClick={e => { if (editingName) e.stopPropagation() }}>
+          {isLocked && lockedVariant === 'bills' && <span className="text-sm">🔔</span>}
+          {isLocked && lockedVariant !== 'bills' && <span className="text-sm">💳</span>}
+          {editingName && !isLocked ? (
+            <input
+              autoFocus
+              value={nameValue}
+              onChange={e => setNameValue(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={e => {
+                e.stopPropagation()
+                if (e.key === 'Enter') commitRename()
+                if (e.key === 'Escape') { setNameValue(group.name); setEditingName(false) }
+              }}
+              onClick={e => e.stopPropagation()}
+              className="text-xs font-bold uppercase tracking-widest bg-transparent outline-none"
+              style={{
+                color: 'var(--text-primary)',
+                borderBottom: '1px solid rgba(139,92,246,0.6)',
+                minWidth: '80px',
+                width: `${Math.max(nameValue.length, 4)}ch`,
+              }}
+            />
+          ) : (
+            <span
+              className="text-xs font-bold uppercase tracking-widest select-none"
+              style={{ color: isLocked && lockedVariant === 'bills' ? 'rgba(52,211,153,0.8)' : isLocked ? 'rgba(252,165,165,0.8)' : 'var(--text-secondary)' }}
+              onContextMenu={e => {
+                if (isLocked) return
+                e.preventDefault()
+                e.stopPropagation()
+                setNameValue(group.name)
+                setEditingName(true)
+              }}
+            >
+              {group.name}
+            </span>
+          )}
         </div>
         <div className="flex items-center flex-shrink-0">
-          <div style={{ width: '128px', textAlign: 'right', paddingRight: '16px' }}>
-            <span className="text-sm font-medium" style={{ color: 'var(--text-faint)' }}>{fmt(totalAssigned)}</span>
+          {/* Mirror category row button structure: no container paddingRight, span carries pr-3 */}
+          <div style={{ width: '112px' }}>
+            <span className="text-sm block w-full text-right pl-2 pr-3 py-0.5" style={{ color: 'var(--text-faint)' }}>{fmt(totalAssigned)}</span>
           </div>
-          <div style={{ width: '128px', textAlign: 'right', paddingRight: '16px' }}>
-            <span className="text-sm" style={{ color: 'var(--text-faint)' }}>{fmt(totalActivity)}</span>
+          <div style={{ width: '112px' }}>
+            <span className="text-sm block w-full text-right pl-2 pr-3 py-0.5" style={{ color: 'var(--text-faint)' }}>{fmt(totalActivity)}</span>
           </div>
-          <div style={{ width: '128px', textAlign: 'right' }}>
-            <span className="text-sm font-semibold" style={{ color: totalAvailable < 0 ? '#f87171' : 'var(--text-secondary)' }}>
+          {/* Mirror category row available: flex right + 2px container pr, invisible pill with same px-2.5 */}
+          <div style={{ width: '112px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '2px' }}>
+            <span
+              className="text-sm font-medium px-2.5 py-0.5 inline-flex items-center"
+              style={{
+                borderRadius: '20px',
+                background: 'transparent',
+                border: '1px solid transparent',
+                color: totalAvailable < 0 ? '#f87171' : 'var(--text-secondary)',
+              }}
+            >
               {fmt(totalAvailable)}
             </span>
           </div>
         </div>
       </div>
 
-      {!collapsed && (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateRows: collapsed ? '0fr' : '1fr',
+          transition: 'grid-template-rows 0.25s ease',
+        }}
+      >
+        <div style={{ overflow: 'hidden' }}>
         <div className="py-1">
           {group.categories.length === 0 && (
             <div className="px-4 py-3 text-xs" style={{ color: 'var(--text-faint)' }}>
@@ -134,10 +204,13 @@ export default function CategoryGroup({
               onCatDragEnd={onCatDragEnd}
               isDraggingOver={draggingCatIdx !== null && draggingCatIdx === idx}
               isCCPayment={isLocked}
+              transactions={transactions}
+              budgetMonth={budgetMonth}
             />
           ))}
         </div>
-      )}
+        </div>
+      </div>
     </div>
   )
 }

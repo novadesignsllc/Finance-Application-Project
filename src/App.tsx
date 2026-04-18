@@ -6,12 +6,15 @@ import BudgetTable from './components/BudgetTable'
 import InspectorPanel from './components/InspectorPanel'
 import TransactionView from './components/TransactionView'
 import CreditView from './components/CreditView'
-import type { CreditPlan } from './components/CreditView'
+import AllTransactionsView from './components/AllTransactionsView'
+import BillsView from './components/BillsView'
 import LoginPage from './components/LoginPage'
 import { supabase } from './lib/supabase'
 import { loadAll, seedDefaultBudget, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction } from './lib/db'
 import { mockBudgetData } from './data/mockData'
 import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
+import { mockBillGroups, toMonthly, getNextPaymentDate } from './data/billData'
+import type { BillGroup, BillFrequency } from './data/billData'
 import type { Session } from '@supabase/supabase-js'
 
 const MIN_WIDTH = 200
@@ -24,8 +27,38 @@ function buildGradient(colors: string[]): string {
   return `linear-gradient(to bottom, ${stops.join(', ')})`
 }
 
+// Suppress browser extension autofill (1Password, LastPass, etc.) on all
+// non-password inputs across the app. Runs once on mount via MutationObserver.
+function useDisableAutofill() {
+  useEffect(() => {
+    const stamp = (el: Element) => {
+      if (!(el instanceof HTMLInputElement)) return
+      if (el.type === 'password') return
+      el.setAttribute('autocomplete', 'off')
+      el.setAttribute('data-1p-ignore', 'true')
+      el.setAttribute('data-lpignore', 'true')
+      el.setAttribute('data-form-type', 'other')
+    }
+    document.querySelectorAll('input').forEach(stamp)
+    const observer = new MutationObserver(mutations => {
+      for (const m of mutations) {
+        m.addedNodes.forEach(node => {
+          if (node instanceof Element) {
+            stamp(node)
+            node.querySelectorAll('input').forEach(stamp)
+          }
+        })
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [])
+}
+
 const CC_GROUP_ID = 'cc-payments-group'
 const CC_GROUP_NAME = 'Credit Card Payments'
+const BILLS_GROUP_ID = 'bills-budget-group'
+const BILLS_GROUP_NAME = 'Bills'
 
 const ACCOUNT_TYPES = [
   { value: 'checking', label: 'Checking' },
@@ -58,6 +91,7 @@ export default function App() {
 }
 
 function BudgetApp() {
+  useDisableAutofill()
   const [activeView, setActiveView] = useState('budget')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
@@ -79,10 +113,38 @@ function BudgetApp() {
   const [newBalance, setNewBalance] = useState('')
   const [newType, setNewType] = useState('checking')
   const [loading, setLoading] = useState(true)
-  const [creditPlans, setCreditPlans] = useState<Record<string, CreditPlan>>(() => {
-    try { const s = localStorage.getItem('creditPlans'); return s ? JSON.parse(s) : {} }
-    catch { return {} }
-  })
+  const [dataReady, setDataReady] = useState(false)
+  const [billGroups, setBillGroups] = useState<BillGroup[]>(mockBillGroups)
+
+  // When bills change, archive budget categories for deleted bills that have transactions
+  const handleBillGroupsChange = (newGroups: BillGroup[]) => {
+    const oldBillIds = new Set(billGroups.flatMap(g => g.bills.map(b => b.id)))
+    const newBillIds = new Set(newGroups.flatMap(g => g.bills.map(b => b.id)))
+    const deletedIds = [...oldBillIds].filter(id => !newBillIds.has(id))
+
+    if (deletedIds.length > 0) {
+      setBudgetGroups(prev => {
+        let next = prev
+        for (const deletedId of deletedIds) {
+          const catId = `bill-category-${deletedId}`
+          const billCat = prev.flatMap(g => g.categories).find(c => c.id === catId)
+          if (billCat) {
+            const hasTxs = transactions.some(t => t.category === billCat.name)
+            if (hasTxs) {
+              next = next.map(g => ({
+                ...g,
+                categories: g.categories.map(c => c.id === catId ? { ...c, archived: true } : c),
+              }))
+            }
+          }
+        }
+        return next
+      })
+    }
+
+    setBillGroups(newGroups)
+  }
+
   const isResizing = useRef(false)
   const userId = useRef<string | null>(null)
   const dataLoaded = useRef(false)
@@ -109,6 +171,7 @@ function BudgetApp() {
         console.error('Failed to load data:', e)
       } finally {
         dataLoaded.current = true
+        setDataReady(true)
         setLoading(false)
       }
     })
@@ -147,6 +210,52 @@ function BudgetApp() {
     }, 600)
   }, [budgetGroups])
 
+  // ── Bills → Budget group sync ──────────────────────────────────
+  // When bills change, keep the locked "Bills" budget group in sync.
+  // Archived categories (from deleted bills that had transactions) are preserved.
+  useEffect(() => {
+    if (!dataReady) return
+    const allBills = billGroups.flatMap(g => g.bills)
+    setBudgetGroups(prev => {
+      const existing = prev.find(g => g.id === BILLS_GROUP_ID)
+      const archivedCats = existing?.categories.filter(c => c.archived) ?? []
+
+      if (allBills.length === 0 && archivedCats.length === 0) {
+        return existing ? prev.filter(g => g.id !== BILLS_GROUP_ID) : prev
+      }
+
+      const activeCats = allBills.map(bill => {
+        const catId = `bill-category-${bill.id}`
+        const found = existing?.categories.find(c => c.id === catId)
+        const plan = { type: 'bill' as const, monthlyAmount: toMonthly(bill.amount, bill.frequency), goalDate: bill.dueDate, billFrequency: bill.frequency }
+        return found
+          ? { ...found, name: bill.name, emoji: bill.emoji, plan }
+          : { id: catId, name: bill.name, emoji: bill.emoji, assigned: 0, activity: 0, available: 0, plan }
+      })
+
+      const desiredCats = [...activeCats, ...archivedCats]
+
+      const alreadySynced = existing &&
+        existing.categories.length === desiredCats.length &&
+        desiredCats.every((c, i) => {
+          const ec = existing.categories[i]
+          return ec?.id === c.id && ec?.name === c.name && ec?.emoji === c.emoji &&
+            JSON.stringify(ec?.plan) === JSON.stringify(c.plan)
+        })
+      if (alreadySynced) return prev
+
+      const newGroup = { id: BILLS_GROUP_ID, name: BILLS_GROUP_NAME, categories: desiredCats }
+      if (!existing) {
+        const ccIdx = prev.findIndex(g => g.id === CC_GROUP_ID)
+        const insertAt = ccIdx >= 0 ? ccIdx + 1 : 0
+        const next = [...prev]
+        next.splice(insertAt, 0, newGroup)
+        return next
+      }
+      return prev.map(g => g.id === BILLS_GROUP_ID ? newGroup : g)
+    })
+  }, [billGroups, dataReady])
+
   // ── Auto-sync Credit Card Payment categories ───────────────────
   useEffect(() => {
     if (!dataLoaded.current) return
@@ -181,13 +290,40 @@ function BudgetApp() {
     })))
   }
 
+  const onDebtPayoffChange = (catId: string, date: string | undefined) => {
+    setBudgetGroups(prev => prev.map(g => ({
+      ...g,
+      categories: g.categories.map(c => c.id === catId ? { ...c, debtPayoffDate: date } : c),
+    })))
+  }
+
+  // Undo/redo stacks for allocation changes (session-local, not persisted)
+  const undoStack = useRef<typeof monthlyAssigned[]>([])
+  const redoStack = useRef<typeof monthlyAssigned[]>([])
+
   const onAssignedChange = (catId: string, value: number) => {
+    undoStack.current.push(monthlyAssigned)
+    redoStack.current = []
     setMonthlyAssigned(prev => ({
       ...prev,
       [monthKey]: { ...prev[monthKey], [catId]: value },
     }))
     if (userId.current) saveAssigned(userId.current, catId, monthKey, value).catch(console.error)
   }
+
+  const undoAssigned = useCallback(() => {
+    if (undoStack.current.length === 0) return
+    const snapshot = undoStack.current.pop()!
+    redoStack.current.push(monthlyAssigned)
+    setMonthlyAssigned(snapshot)
+  }, [monthlyAssigned])
+
+  const redoAssigned = useCallback(() => {
+    if (redoStack.current.length === 0) return
+    const snapshot = redoStack.current.pop()!
+    undoStack.current.push(monthlyAssigned)
+    setMonthlyAssigned(snapshot)
+  }, [monthlyAssigned])
 
   // Build ordered list of month keys from Jan 2026 up to and including budgetMonth
   const monthSequence = useMemo(() => {
@@ -210,6 +346,32 @@ function BudgetApp() {
     const accountOrder = new Map<string, number>()
     accounts.forEach((a, i) => accountOrder.set(a.id, i))
 
+    // Pre-compute which regular category IDs are underfunding a CC this month
+    const ccUnderfundedCatIds = new Set<string>()
+    {
+      const [curYear, curMonth] = monthKey.split('-').map(Number)
+      for (const account of accounts.filter(a => a.type === 'credit')) {
+        const purchasesByCategory = new Map<string, number>()
+        for (const tx of transactions) {
+          if (tx.accountId !== account.id || tx.outflow == null || tx.payee === 'Starting Balance' || !tx.category) continue
+          const parts = tx.date.split('/')
+          if (parseInt(parts[2]) !== curYear || parseInt(parts[0]) !== curMonth) continue
+          purchasesByCategory.set(tx.category, (purchasesByCategory.get(tx.category) ?? 0) + tx.outflow)
+        }
+        for (const [catName, purchaseTotal] of purchasesByCategory) {
+          for (const grp of budgetGroups) {
+            if (grp.id === CC_GROUP_ID) continue
+            const found = grp.categories.find(cat => cat.name === catName)
+            if (found) {
+              const allocated = monthlyAssigned[monthKey]?.[found.id] ?? 0
+              if (allocated < purchaseTotal) ccUnderfundedCatIds.add(found.id)
+              break
+            }
+          }
+        }
+      }
+    }
+
     return budgetGroups.map(g => {
       const computedCats = g.categories.map(c => {
         let carryover = 0
@@ -217,24 +379,73 @@ function BudgetApp() {
         let activity = 0
         let available = 0
 
+        // CC-specific: computed across all time, captured during loop
+        let ccFundingThisMonth: { categoryName: string; amount: number; total: number }[] = []
+        let ccTotalStartingBalance = 0
+        let ccMonthPurchases = 0   // total purchases this month (for fully-funded check)
+        let ccMonthFunded = 0      // total funded this month
+        if (ccPaymentMap.has(c.id)) {
+          const accountId = ccPaymentMap.get(c.id)!
+          ccTotalStartingBalance = transactions
+            .filter(t => t.accountId === accountId && t.payee === 'Starting Balance' && t.outflow != null)
+            .reduce((s, t) => s + (t.outflow ?? 0), 0)
+        }
+
         for (const mk of monthSequence) {
           const [mkYear, mkMonth] = mk.split('-').map(Number)
           assigned = monthlyAssigned[mk]?.[c.id] ?? 0
 
           if (ccPaymentMap.has(c.id)) {
-            // CC payment category: activity derived from the card's own transactions
+            // CC payment category
             const accountId = ccPaymentMap.get(c.id)!
             const ccTxs = transactions.filter(t => {
               if (t.accountId !== accountId) return false
               const parts = t.date.split('/')
               return parseInt(parts[2]) === mkYear && parseInt(parts[0]) === mkMonth
             })
-            activity = ccTxs.reduce((sum, t) => {
-              if (t.payee === 'Starting Balance') return sum - (t.outflow ?? 0) // pre-existing debt
-              if (t.outflow != null) return sum + t.outflow  // CC purchase → earmark for payment
-              if (t.inflow != null) return sum - t.inflow    // payment made → reduces earmark
-              return sum
-            }, 0)
+
+            const totalPurchases = ccTxs
+              .filter(t => t.outflow != null && t.payee !== 'Starting Balance')
+              .reduce((s, t) => s + (t.outflow ?? 0), 0)
+
+            const totalPayments = ccTxs
+              .filter(t => t.inflow != null)
+              .reduce((s, t) => s + (t.inflow ?? 0), 0)
+
+            // Activity: only purchases (spending) — payments are not activity
+            activity = -totalPurchases
+
+            // Coverage: CC purchases backed by their category's allocation this month
+            const purchasesByCategory = new Map<string, number>()
+            for (const tx of ccTxs) {
+              if (tx.outflow != null && tx.payee !== 'Starting Balance' && tx.category) {
+                purchasesByCategory.set(tx.category, (purchasesByCategory.get(tx.category) ?? 0) + tx.outflow)
+              }
+            }
+            let coverage = 0
+            for (const [catName, purchaseTotal] of purchasesByCategory) {
+              let catId: string | null = null
+              for (const grp of budgetGroups) {
+                if (grp.id === CC_GROUP_ID) continue
+                const found = grp.categories.find(cat => cat.name === catName)
+                if (found) { catId = found.id; break }
+              }
+              const catAllocated = catId ? (monthlyAssigned[mk]?.[catId] ?? 0) : 0
+              const funded = Math.min(purchaseTotal, Math.max(0, catAllocated))
+              coverage += funded
+              if (mk === monthKey) {
+                ccMonthPurchases += purchaseTotal
+                ccMonthFunded += funded
+                if (purchaseTotal > 0) ccFundingThisMonth.push({ categoryName: catName, amount: funded, total: purchaseTotal })
+              }
+            }
+
+            // Available: money set aside to pay off the balance.
+            // = carryover + manually assigned + funded purchases - payments made
+            // Starting balance is NOT subtracted — it must be covered by manual assignment
+            // (tracked separately for the inspector warning).
+            available = carryover + assigned + coverage - totalPayments
+            carryover = available
           } else {
             const catTxs = transactions.filter(t => {
               if (t.category !== c.name || t.payee === 'Starting Balance') return false
@@ -242,30 +453,89 @@ function BudgetApp() {
               return parseInt(parts[2]) === mkYear && parseInt(parts[0]) === mkMonth
             })
             activity = catTxs.reduce((sum, t) => sum + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+            available = carryover + assigned + activity
+            carryover = available
           }
-
-          available = carryover + assigned + activity
-          carryover = available
         }
 
-        // Plan status — is this month's assignment meeting the plan?
-        let planMet: boolean | null = null
+        // Plan status — drives color coding of the available column
+        let planStatus: 'met' | 'over' | 'under' | undefined
         const plan = c.plan
         if (plan) {
           if (plan.type === 'build') {
-            planMet = assigned >= (plan.monthlyAmount ?? 0)
+            // Red until monthly amount is assigned, then green
+            planStatus = assigned >= (plan.monthlyAmount ?? 0) ? 'met' : 'under'
           } else if (plan.type === 'spending') {
-            planMet = assigned >= (plan.monthlyAmount ?? 0) && available >= 0
+            const target = plan.monthlyAmount ?? 0
+            const spending = Math.abs(activity) // activity is negative for outflows
+            if (spending > target) {
+              // Spent more than target — red
+              planStatus = 'under'
+            } else if (assigned > target) {
+              // Over-allocated vs target — yellow caution
+              planStatus = 'over'
+            } else if (assigned >= target) {
+              // Exactly the right amount allocated, spending within target — green
+              planStatus = 'met'
+            }
+            // else: under-allocated, no spending yet — no color override
           } else if (plan.type === 'savings' && plan.goalAmount && plan.goalDate) {
+            // Green once monthly needed amount is assigned
             const today = new Date()
             const goal = new Date(plan.goalDate)
             const monthsLeft = Math.max(1, (goal.getFullYear() - today.getFullYear()) * 12 + (goal.getMonth() - today.getMonth()))
             const needed = plan.goalAmount / monthsLeft
-            planMet = assigned >= needed
+            planStatus = assigned >= needed ? 'met' : 'under'
+          } else if (plan.type === 'bill') {
+            const needed = plan.monthlyAmount ?? 0
+            if (assigned >= needed) {
+              planStatus = 'met'   // green — fully funded
+            } else if (plan.goalDate && plan.billFrequency) {
+              const nextDate = getNextPaymentDate(plan.goalDate, plan.billFrequency as BillFrequency)
+              if (nextDate) {
+                const today = new Date(); today.setHours(0, 0, 0, 0)
+                const days = Math.round((nextDate.getTime() - today.getTime()) / 86400000)
+                planStatus = days <= 3 ? 'under' : 'over'  // red if due ≤3 days, yellow otherwise
+              } else {
+                planStatus = 'over'
+              }
+            } else {
+              planStatus = 'over'
+            }
           }
         }
 
-        return { ...c, assigned, activity, available, overspent: available < 0, planMet }
+        // Attach CC-specific fields for inspector panel and activity popup
+        const ccExtra = ccPaymentMap.has(c.id) ? (() => {
+          const accountId = ccPaymentMap.get(c.id)!
+          const ccTotalAssigned = Object.values(monthlyAssigned)
+            .reduce((s, cats) => s + (cats[c.id] ?? 0), 0)
+          const ccAccountBalance = Math.abs(
+            transactions
+              .filter(t => t.accountId === accountId)
+              .reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+          )
+          // Debt payoff plan drives planStatus for CC categories
+          if (c.debtPayoffDate) {
+            const today = new Date()
+            const payoff = new Date(c.debtPayoffDate + 'T00:00:00')
+            const monthsLeft = Math.max(1, (payoff.getFullYear() - today.getFullYear()) * 12 + (payoff.getMonth() - today.getMonth()))
+            const monthlyNeeded = ccAccountBalance / monthsLeft
+            planStatus = assigned >= monthlyNeeded ? 'met' : 'under'
+          }
+          return {
+            ccStartingBalance: ccTotalStartingBalance,
+            ccStartingUncovered: Math.max(0, ccTotalStartingBalance - ccTotalAssigned),
+            ccFunding: ccFundingThisMonth,
+            ccFullyFunded: ccMonthPurchases === 0 || ccMonthFunded >= ccMonthPurchases,
+            ccAccountBalance,
+          }
+        })() : {}
+
+        return {
+          ...c, assigned, activity, available, overspent: available < 0, planStatus, ...ccExtra,
+          causingCCUnderfunding: !ccPaymentMap.has(c.id) && ccUnderfundedCatIds.has(c.id),
+        }
       })
 
       // Keep CC payment categories in sidebar account order
@@ -279,7 +549,7 @@ function BudgetApp() {
 
       return { ...g, categories: computedCats }
     })
-  }, [budgetGroups, transactions, budgetMonth, monthlyAssigned, monthSequence, accounts])
+  }, [budgetGroups, transactions, budgetMonth, monthlyAssigned, monthSequence, accounts, monthKey])
 
   const selectedCategory = budgetGroupsWithActivity.flatMap(g => g.categories).find(c => c.id === selectedCategoryId) ?? null
 
@@ -287,7 +557,18 @@ function BudgetApp() {
     .filter(a => !closedAccountIds.has(a.id) && a.type !== 'credit')
     .reduce((sum, a) => sum + transactions.filter(t => t.accountId === a.id).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0), 0)
 
-  const totalAssigned = budgetGroupsWithActivity.flatMap(g => g.categories).reduce((s, c) => s + c.assigned, 0)
+  // Sum assignments across all months up to and including current month
+  // (not just the current month — otherwise navigating to a new month resets the balance)
+  const totalAssigned = useMemo(() => {
+    let total = 0
+    for (const [mk, cats] of Object.entries(monthlyAssigned)) {
+      const [mkY, mkM] = mk.split('-').map(Number)
+      if (mkY < budgetMonth.year || (mkY === budgetMonth.year && mkM <= budgetMonth.month)) {
+        total += Object.values(cats).reduce((s, v) => s + v, 0)
+      }
+    }
+    return total
+  }, [monthlyAssigned, budgetMonth])
   const moneyToBudget = totalCash - totalAssigned
 
   // Sum of assigned across all months strictly after budgetMonth
@@ -349,6 +630,21 @@ function BudgetApp() {
     return () => document.removeEventListener('keydown', handler)
   }, [showAddAccount, newName, newBalance, newType])
 
+  // Global undo/redo for allocation changes
+  // Skip when focus is inside an input/textarea so native text editing shortcuts are unaffected
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) return
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undoAssigned() }
+      if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); redoAssigned() }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [undoAssigned, redoAssigned])
+
   const openModal = () => {
     setNewName('')
     setNewBalance('')
@@ -372,7 +668,7 @@ function BudgetApp() {
       accountId: account.id,
       date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
       payee: 'Starting Balance',
-      category: 'Money To Budget',
+      category: 'Money To Allocate',
       memo: '',
       outflow: isCredit ? Math.abs(balance) : null,
       inflow: isCredit ? null : balance,
@@ -450,7 +746,7 @@ function BudgetApp() {
           className="flex flex-col h-full overflow-hidden"
           style={{ background: 'var(--bg-main)', borderRadius: '10px' }}
         >
-          {!selectedAccountId && activeView !== 'credit' && (
+          {!selectedAccountId && activeView !== 'credit' && activeView !== 'all-transactions' && activeView !== 'bills' && (
             <BudgetHeader
               budgetMonth={budgetMonth}
               onPrev={prevMonth}
@@ -494,20 +790,37 @@ function BudgetApp() {
               </div>
             ) : activeView === 'credit' ? (
               <div className="flex-1 min-w-0 flex flex-col min-h-0">
-              <CreditView
-                accounts={accounts}
-                closedAccountIds={closedAccountIds}
-                transactions={transactions}
-                creditPlans={creditPlans}
-                onCreditPlanChange={(id, plan) => {
-                  setCreditPlans(prev => {
-                    const next = { ...prev, [id]: plan }
-                    localStorage.setItem('creditPlans', JSON.stringify(next))
-                    return next
-                  })
-                }}
-                gradientColors={gradientColors}
-              />
+                <CreditView
+                  debtPayoffCards={budgetGroupsWithActivity
+                    .flatMap(g => g.categories)
+                    .filter(c => c.id.startsWith('cc-payment-') && !!c.debtPayoffDate)
+                    .map(c => ({
+                      categoryId: c.id,
+                      name: c.name,
+                      accountBalance: c.ccAccountBalance ?? 0,
+                      available: c.available,
+                      debtPayoffDate: c.debtPayoffDate!,
+                    }))}
+                />
+              </div>
+            ) : activeView === 'bills' ? (
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+                <BillsView
+                  billGroups={billGroups}
+                  onBillGroupsChange={handleBillGroupsChange}
+                  accounts={accounts.filter(a => !closedAccountIds.has(a.id))}
+                  gradientColors={gradientColors}
+                />
+              </div>
+            ) : activeView === 'all-transactions' ? (
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+                <AllTransactionsView
+                  accounts={accounts.filter(a => !closedAccountIds.has(a.id))}
+                  transactions={transactions}
+                  onTransactionsChange={setTransactions}
+                  budgetGroups={budgetGroups}
+                  gradientColors={gradientColors}
+                />
               </div>
             ) : (
               <>
@@ -518,8 +831,11 @@ function BudgetApp() {
                   onGroupsChange={setBudgetGroups}
                   onAssignedChange={onAssignedChange}
                   ccGroupId={CC_GROUP_ID}
+                  billsGroupId={BILLS_GROUP_ID}
+                  transactions={transactions}
+                  budgetMonth={budgetMonth}
                 />
-                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} />
+                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
               </>
             )}
           </div>
