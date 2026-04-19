@@ -42,19 +42,34 @@ export default function IncomeView({ transactions, accounts, gradientColors }: I
     return [...map.entries()].sort((a, b) => b[1] - a[1])
   }, [incomeTxs])
 
-  // ── Monthly chart data (last 12 months) ──────────────────────────
+  // ── Monthly chart data — from first income month through today ───
   const monthlyData = useMemo(() => {
-    const now = new Date()
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
-      const year = d.getFullYear()
-      const month = d.getMonth() + 1
+    // Find the earliest month where income was logged
+    const incomeDates = transactions
+      .filter(t => t.category === 'Income' && (t.inflow ?? 0) > 0)
+      .map(t => parseTxDate(t.date))
+      .filter((d): d is { year: number; month: number } => d !== null)
 
+    if (incomeDates.length === 0) return []
+
+    const earliest = incomeDates.reduce(
+      (min, d) => d.year < min.year || (d.year === min.year && d.month < min.month) ? d : min,
+      incomeDates[0]
+    )
+
+    const now = new Date()
+    const endYear = now.getFullYear()
+    const endMonth = now.getMonth() + 1
+
+    const result: { label: string; year: number; month: number; income: number; spending: number }[] = []
+    let y = earliest.year, m = earliest.month
+
+    while (y < endYear || (y === endYear && m <= endMonth)) {
       const income = transactions
         .filter(t => {
           if (t.category !== 'Income' || (t.inflow ?? 0) <= 0) return false
           const p = parseTxDate(t.date)
-          return p?.year === year && p?.month === month
+          return p?.year === y && p?.month === m
         })
         .reduce((s, t) => s + (t.inflow ?? 0), 0)
 
@@ -62,12 +77,15 @@ export default function IncomeView({ transactions, accounts, gradientColors }: I
         .filter(t => {
           if (t.payee === 'Starting Balance' || (t.outflow ?? 0) <= 0) return false
           const p = parseTxDate(t.date)
-          return p?.year === year && p?.month === month
+          return p?.year === y && p?.month === m
         })
         .reduce((s, t) => s + (t.outflow ?? 0), 0)
 
-      return { label: MONTH_LABELS[d.getMonth()], year, month, income, spending }
-    })
+      result.push({ label: MONTH_LABELS[m - 1], year: y, month: m, income, spending })
+      m++
+      if (m > 12) { m = 1; y++ }
+    }
+    return result
   }, [transactions])
 
   const maxValue = Math.max(...monthlyData.map(m => Math.max(m.income, m.spending)), 1)
@@ -84,11 +102,13 @@ export default function IncomeView({ transactions, accounts, gradientColors }: I
 
   // Chart constants
   const CHART_H = 160
-  const N = monthlyData.length
-  const VW = 640
-  const GROUP_W = VW / N
-  const BAR_W = Math.floor(GROUP_W * 0.28)
-  const BAR_GAP = Math.floor(GROUP_W * 0.06)
+  const LEFT_PAD = 62   // room for Y-axis dollar labels
+  const N = Math.max(monthlyData.length, 1)
+  // Each month gets at least 44px, max 72px in viewBox coords
+  const GROUP_W = Math.min(72, Math.max(44, 640 / N))
+  const VW = GROUP_W * N
+  const BAR_W = Math.min(20, Math.floor(GROUP_W * 0.30))
+  const BAR_GAP = Math.max(3, Math.floor(GROUP_W * 0.06))
 
   return (
     <div className="flex flex-col h-full min-h-0" style={{ background: 'var(--bg-main)' }}>
@@ -157,18 +177,19 @@ export default function IncomeView({ transactions, accounts, gradientColors }: I
               </div>
 
               <svg
-                viewBox={`0 0 ${VW} ${CHART_H + 28}`}
+                viewBox={`${-LEFT_PAD} 0 ${VW + LEFT_PAD} ${CHART_H + 28}`}
                 width="100%"
                 style={{ display: 'block', overflow: 'visible' }}
               >
                 {/* Horizontal grid lines */}
                 {[0.25, 0.5, 0.75, 1].map(frac => {
                   const y = Math.round(CHART_H * (1 - frac))
+                  const label = fmt(maxValue * frac).replace(/\.00$/, '')
                   return (
                     <g key={frac}>
                       <line x1={0} y1={y} x2={VW} y2={y} stroke="var(--color-border)" strokeWidth={0.75} strokeDasharray="3 3" />
-                      <text x={-4} y={y + 4} textAnchor="end" fontSize={9} fill="var(--text-faint)" fontFamily="system-ui">
-                        {fmt(maxValue * frac).replace('$', '$').replace('.00', '')}
+                      <text x={-8} y={y + 4} textAnchor="end" fontSize={9} fill="var(--text-faint)" fontFamily="system-ui">
+                        {label}
                       </text>
                     </g>
                   )
