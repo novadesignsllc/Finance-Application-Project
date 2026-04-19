@@ -9,6 +9,7 @@ import TransactionView from './components/TransactionView'
 import CreditView from './components/CreditView'
 import AllTransactionsView from './components/AllTransactionsView'
 import BillsView from './components/BillsView'
+import IncomeView from './components/IncomeView'
 import LoginPage from './components/LoginPage'
 import { supabase } from './lib/supabase'
 import { loadAll, seedDefaultBudget, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction } from './lib/db'
@@ -796,7 +797,7 @@ function BudgetApp() {
           className="flex flex-col h-full overflow-hidden"
           style={{ background: 'var(--bg-main)', borderRadius: '10px' }}
         >
-          {!selectedAccountId && activeView !== 'credit' && activeView !== 'all-transactions' && activeView !== 'bills' && (
+          {!selectedAccountId && activeView !== 'credit' && activeView !== 'all-transactions' && activeView !== 'bills' && activeView !== 'income' && (
             <BudgetHeader
               budgetMonth={budgetMonth}
               onPrev={prevMonth}
@@ -852,6 +853,14 @@ function BudgetApp() {
                       available: c.available,
                       debtPayoffDate: c.debtPayoffDate!,
                     }))}
+                />
+              </div>
+            ) : activeView === 'income' ? (
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+                <IncomeView
+                  transactions={transactions}
+                  accounts={accounts.filter(a => !closedAccountIds.has(a.id))}
+                  gradientColors={gradientColors}
                 />
               </div>
             ) : activeView === 'bills' ? (

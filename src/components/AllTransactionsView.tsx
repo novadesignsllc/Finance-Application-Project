@@ -48,7 +48,7 @@ export default function AllTransactionsView({ accounts, transactions, onTransact
     : `linear-gradient(135deg, ${gradientColors.join(', ')})`
 
   const allCategories = [
-    { group: 'Inflow', items: ['Money To Allocate'] },
+    { group: 'Inflow', items: ['Income', 'Money To Allocate'] },
     ...budgetGroups
       .filter(g => g.name !== 'Credit Card Payments')
       .map(g => ({ group: g.name, items: g.categories.map(c => c.name) })),

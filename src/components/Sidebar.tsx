@@ -120,6 +120,15 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
               ),
             },
             {
+              id: 'income', label: 'Income',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 11.5l3.5-4.5 3 3L13 3" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M10.5 3H13v2.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              ),
+            },
+            {
               id: 'bills', label: 'Bills',
               icon: (
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
