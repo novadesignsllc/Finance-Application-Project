@@ -11,8 +11,9 @@ import AllTransactionsView from './components/AllTransactionsView'
 import BillsView from './components/BillsView'
 import IncomeView from './components/IncomeView'
 import LoginPage from './components/LoginPage'
+import OnboardingModal from './components/OnboardingModal'
 import { supabase } from './lib/supabase'
-import { loadAll, seedDefaultBudget, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups } from './lib/db'
+import { loadAll, seedDefaultBudget, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups } from './lib/db'
 import { mockBudgetData } from './data/mockData'
 import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
 import { mockBillGroups, toMonthly, getNextPaymentDate } from './data/billData'
@@ -200,6 +201,8 @@ function BudgetApp() {
     }
   }, [transactions, dataReady])
 
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
   const isResizing = useRef(false)
   const userId = useRef<string | null>(null)
   const dataLoaded = useRef(false)
@@ -211,10 +214,11 @@ function BudgetApp() {
       userId.current = user.id
       try {
         const data = await loadAll(user.id)
-        // New user: seed default budget template
-        if (data.budgetGroups.length === 0) {
-          const seeded = await seedDefaultBudget(user.id, mockBudgetData)
-          setBudgetGroups(seeded)
+        // New user: no data and onboarding not previously completed → show choice screen
+        const onboardingDone = !!localStorage.getItem(`onboarding_complete_${user.id}`)
+        const isNewUser = data.budgetGroups.length === 0 && data.accounts.length === 0 && !onboardingDone
+        if (isNewUser) {
+          setShowOnboarding(true)
         } else {
           setBudgetGroups(data.budgetGroups)
         }
@@ -222,8 +226,7 @@ function BudgetApp() {
         setTransactions(data.transactions)
         setClosedAccountIds(data.closedAccountIds)
         setMonthlyAssigned(data.monthlyAssigned)
-        // Use saved bills if any exist, otherwise fall back to mock data for first-time users
-        setBillGroups(data.billGroups.length > 0 ? data.billGroups : mockBillGroups)
+        setBillGroups(data.billGroups)
       } catch (e) {
         console.error('Failed to load data:', e)
       } finally {
@@ -233,6 +236,36 @@ function BudgetApp() {
       }
     })
   }, [])
+
+  // ── Onboarding: user chose placeholder data or clean slate ──────
+  async function handleOnboardingChoice(withPlaceholder: boolean) {
+    const uid = userId.current
+    if (!uid) return
+    if (withPlaceholder) {
+      const seeded = await seedSampleData(uid)
+      setBudgetGroups(seeded.budgetGroups)
+      setAccounts(seeded.accounts)
+      setTransactions(seeded.transactions)
+      setBillGroups(seeded.billGroups)
+    }
+    localStorage.setItem(`onboarding_complete_${uid}`, 'true')
+    setShowOnboarding(false)
+  }
+
+  // ── Reset all account data (keeps auth, wipes everything else) ──
+  async function handleResetAccount() {
+    const uid = userId.current
+    if (!uid) return
+    await resetUserData(uid)
+    setBudgetGroups([])
+    setAccounts([])
+    setTransactions([])
+    setClosedAccountIds(new Set())
+    setMonthlyAssigned({})
+    setBillGroups([])
+    localStorage.removeItem(`onboarding_complete_${uid}`)
+    setShowOnboarding(true)
+  }
 
   // ── Sync transactions to Supabase on change ─────────────────────
   const prevTransactions = useRef<Transaction[]>([])
@@ -758,6 +791,10 @@ function BudgetApp() {
     </div>
   )
 
+  if (showOnboarding) return (
+    <OnboardingModal onChoice={handleOnboardingChoice} isDark={isDark} />
+  )
+
   return (
     <div
       data-theme={isDark ? 'dark' : 'light'}
@@ -779,6 +816,7 @@ function BudgetApp() {
         onAccountsChange={setAccounts}
         transactions={transactions}
         closedAccountIds={closedAccountIds}
+        onResetAccount={handleResetAccount}
       />
 
       {/* Resize handle */}

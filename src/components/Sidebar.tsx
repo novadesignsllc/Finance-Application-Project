@@ -23,6 +23,7 @@ interface SidebarProps {
   onAccountsChange: (accounts: Account[]) => void
   transactions: Transaction[]
   closedAccountIds: Set<string>
+  onResetAccount: () => Promise<void>
 }
 
 function buildGradient(colors: string[]): string {
@@ -31,10 +32,14 @@ function buildGradient(colors: string[]): string {
   return `linear-gradient(to bottom, ${stops.join(', ')})`
 }
 
-export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggle, gradientColors, onGradientChange, width, selectedAccountId, onAccountSelect, onAddAccount, accounts, onAccountsChange, transactions, closedAccountIds }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggle, gradientColors, onGradientChange, width, selectedAccountId, onAccountSelect, onAddAccount, accounts, onAccountsChange, transactions, closedAccountIds, onResetAccount }: SidebarProps) {
   const setAccounts = onAccountsChange
   const [showSettings, setShowSettings] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
+  // Reset flow: 0 = idle, 1 = warning shown, 2 = type-to-confirm
+  const [resetPhase, setResetPhase] = useState<0 | 1 | 2>(0)
+  const [resetText, setResetText] = useState('')
+  const [resetBusy, setResetBusy] = useState(false)
   const dragIndex = useRef<number | null>(null)
   const dragOverIndex = useRef<number | null>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
@@ -52,11 +57,13 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
-  // Close settings popover on outside click
+  // Close settings popover on outside click; reset the reset flow when it closes
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
         setShowSettings(false)
+        setResetPhase(0)
+        setResetText('')
       }
     }
     if (showSettings) document.addEventListener('mousedown', handler)
@@ -438,6 +445,108 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
                   <span>↪</span>
                   <span className="font-medium">Sign Out</span>
                 </button>
+
+                {/* ── Reset Account ── */}
+                {resetPhase === 0 && (
+                  <button
+                    onClick={() => setResetPhase(1)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all mt-1"
+                    style={{ color: 'rgba(251,191,36,0.7)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(251,191,36,0.08)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span>⚠</span>
+                    <span className="font-medium">Reset Account Data</span>
+                  </button>
+                )}
+
+                {resetPhase === 1 && (
+                  <div
+                    className="mt-2 rounded-xl p-3"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                  >
+                    <p className="text-xs font-semibold mb-1" style={{ color: '#f87171' }}>
+                      Reset all account data?
+                    </p>
+                    <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      This will permanently delete all your accounts, transactions, budget categories, and bills. Your login is kept. This cannot be undone.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setResetPhase(0)}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => setResetPhase(2)}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                        style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.3)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.2)')}
+                      >
+                        Yes, continue
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {resetPhase === 2 && (
+                  <div
+                    className="mt-2 rounded-xl p-3"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+                  >
+                    <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                      Type <span style={{ color: '#f87171', fontFamily: 'monospace' }}>RESET</span> to confirm
+                    </p>
+                    <input
+                      type="text"
+                      value={resetText}
+                      onChange={e => setResetText(e.target.value)}
+                      placeholder="RESET"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs outline-none mb-2"
+                      style={{
+                        background: 'rgba(255,255,255,0.07)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        color: 'rgba(255,255,255,0.85)',
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setResetPhase(0); setResetText('') }}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        disabled={resetText !== 'RESET' || resetBusy}
+                        onClick={async () => {
+                          setResetBusy(true)
+                          await onResetAccount()
+                          setResetPhase(0)
+                          setResetText('')
+                          setResetBusy(false)
+                        }}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                        style={{
+                          background: resetText === 'RESET' ? 'rgba(239,68,68,0.75)' : 'rgba(239,68,68,0.15)',
+                          color: resetText === 'RESET' ? 'white' : 'rgba(239,68,68,0.35)',
+                          cursor: resetText === 'RESET' ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        {resetBusy ? 'Resetting…' : 'Reset Everything'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <p
                   className="text-center mt-2 select-none"
                   style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.03em' }}

@@ -266,6 +266,231 @@ export async function removeTransaction(id: string): Promise<void> {
   await supabase.from('transactions').delete().eq('id', id)
 }
 
+// ── Seed full sample dataset for new users ────────────────────────
+//
+// Creates: 4 accounts (1 checking, 1 savings, 2 credit), 2 months of
+// realistic transactions with income, bills with due dates.
+
+export async function seedSampleData(userId: string): Promise<{
+  budgetGroups: CategoryGroup[]
+  accounts: Account[]
+  transactions: Transaction[]
+  billGroups: BillGroup[]
+}> {
+  // 1. Seed budget categories and get real UUIDs back
+  const { mockBudgetData } = await import('../data/mockData')
+  const budgetGroups = await seedDefaultBudget(userId, mockBudgetData)
+
+  // 2. Build catName → catId map for transaction linking
+  const catNameToId = new Map<string, string>()
+  budgetGroups.forEach(g => g.categories.forEach(c => catNameToId.set(c.name, c.id)))
+
+  // 3. Generate account IDs
+  const chkId  = crypto.randomUUID()
+  const savId  = crypto.randomUUID()
+  const sapId  = crypto.randomUUID()
+  const disId  = crypto.randomUUID()
+
+  // 4. Insert accounts
+  await supabase.from('accounts').insert([
+    { id: chkId, user_id: userId, name: 'Chase Checking',          type: 'checking', sort_order: 0, closed: false },
+    { id: savId, user_id: userId, name: 'Ally High-Yield Savings',  type: 'savings',  sort_order: 1, closed: false },
+    { id: sapId, user_id: userId, name: 'Chase Sapphire Reserve',   type: 'credit',   sort_order: 2, closed: false },
+    { id: disId, user_id: userId, name: 'Discover It Card',         type: 'credit',   sort_order: 3, closed: false },
+  ])
+
+  // 5. Build transaction rows (DB format: YYYY-MM-DD dates)
+  const cat = (name: string) => catNameToId.get(name) ?? null
+  const tx = (
+    accountId: string, date: string, payee: string,
+    outflow: number | null, inflow: number | null,
+    categoryName: string | null, memo: string, cleared: boolean
+  ) => ({
+    id: crypto.randomUUID(),
+    user_id: userId,
+    account_id: accountId,
+    date,
+    payee,
+    outflow,
+    inflow,
+    category_id: categoryName ? cat(categoryName) : null,
+    category_text: categoryName && !cat(categoryName) ? categoryName : null,
+    memo,
+    cleared,
+    reconciled: false,
+    repeat: null,
+    is_starting_balance: payee === 'Starting Balance',
+  })
+
+  const txRows = [
+    // ── Starting balances ──────────────────────────────────────────
+    tx(chkId, '2026-03-01', 'Starting Balance', null, 4200.00, 'Money To Allocate', '',         true),
+    tx(savId, '2026-03-01', 'Starting Balance', null, 8500.00, 'Money To Allocate', '',         true),
+    tx(sapId, '2026-03-01', 'Starting Balance', 342.18, null,  'Money To Allocate', '',         true),
+    tx(disId, '2026-03-01', 'Starting Balance', 88.45,  null,  'Money To Allocate', '',         true),
+
+    // ── March – income ─────────────────────────────────────────────
+    tx(chkId, '2026-03-01', 'Direct Deposit',       null, 3200.00, null,                    'Payroll',           true),
+    tx(chkId, '2026-03-15', 'Direct Deposit',       null, 3200.00, null,                    'Payroll',           true),
+    tx(chkId, '2026-03-22', 'Freelance Payment',    null,  650.00, null,                    'Invoice #108',      true),
+
+    // ── March – Chase Checking expenses ───────────────────────────
+    tx(chkId, '2026-03-01', 'Landlord LLC',         1800.00, null, 'Rent / Mortgage',       'March rent',        true),
+    tx(chkId, '2026-03-01', 'Verizon Wireless',       45.00, null, 'Phone',                 '',                  true),
+    tx(chkId, '2026-03-03', 'Whole Foods Market',     92.14, null, 'Groceries',             '',                  true),
+    tx(chkId, '2026-03-05', 'GEICO Insurance',       185.00, null, 'Insurance',             '',                  true),
+    tx(chkId, '2026-03-07', 'Shell Gas Station',      58.40, null, 'Transportation',        'Fill up',           true),
+    tx(chkId, '2026-03-10', 'PSE&G',                  97.50, null, 'Electric & Gas',        'March bill',        true),
+    tx(chkId, '2026-03-12', 'Costco',                187.22, null, 'Groceries',             'Monthly stock-up',  true),
+    tx(chkId, '2026-03-15', 'AT&T Internet',          69.99, null, 'Internet',              '',                  true),
+    tx(chkId, '2026-03-18', 'Target',                 44.88, null, 'Shopping',              '',                  true),
+    tx(chkId, '2026-03-20', 'Walgreens',              18.65, null, 'Personal care',         '',                  true),
+    tx(chkId, '2026-03-25', 'Amazon',                 56.99, null, 'Shopping',              '',                  true),
+
+    // ── March – Chase Sapphire ─────────────────────────────────────
+    tx(sapId, '2026-03-04', 'Uber Eats',              28.35, null, 'Dining out',            '',                  true),
+    tx(sapId, '2026-03-08', 'Delta Airlines',         312.00, null, 'Travel',               '',                  true),
+    tx(sapId, '2026-03-10', 'Starbucks',               6.75, null, 'Dining out',            '',                  true),
+    tx(sapId, '2026-03-15', 'Amazon',                  67.99, null, 'Shopping',             '',                  true),
+    tx(sapId, '2026-03-22', 'Nobu Restaurant',        145.00, null, 'Dining out',           'Anniversary dinner',true),
+    tx(sapId, '2026-03-28', 'Payment',                 null, 342.18, 'Credit Card Payments', '',                 true),
+
+    // ── March – Discover It ────────────────────────────────────────
+    tx(disId, '2026-03-02', 'Payment',                 null,  88.45, 'Credit Card Payments', '',                 true),
+    tx(disId, '2026-03-06', 'Meijer',                 103.22, null, 'Groceries',            '',                  true),
+    tx(disId, '2026-03-11', 'Chipotle',                13.85, null, 'Dining out',           '',                  true),
+    tx(disId, '2026-03-14', 'Best Buy',               129.99, null, 'Shopping',             '',                  true),
+    tx(disId, '2026-03-23', 'Netflix',                 15.99, null, 'My spending money',    '',                  true),
+
+    // ── March – Ally Savings ───────────────────────────────────────
+    tx(savId, '2026-03-31', 'Interest',                null,  12.34, null,                  'Monthly interest',  true),
+
+    // ── April – income ─────────────────────────────────────────────
+    tx(chkId, '2026-04-01', 'Direct Deposit',          null, 3200.00, null,                 'Payroll',           true),
+    tx(chkId, '2026-04-15', 'Direct Deposit',          null, 3200.00, null,                 'Payroll',           true),
+
+    // ── April – Chase Checking expenses ───────────────────────────
+    tx(chkId, '2026-04-01', 'Landlord LLC',          1800.00, null, 'Rent / Mortgage',      'April rent',        true),
+    tx(chkId, '2026-04-01', 'Verizon Wireless',        45.00, null, 'Phone',                '',                  true),
+    tx(chkId, '2026-04-03', 'Whole Foods Market',      78.65, null, 'Groceries',            '',                  true),
+    tx(chkId, '2026-04-05', 'GEICO Insurance',        185.00, null, 'Insurance',            '',                  true),
+    tx(chkId, '2026-04-06', 'Shell Gas Station',       61.20, null, 'Transportation',       'Fill up',           true),
+    tx(chkId, '2026-04-09', 'Costco',                 203.40, null, 'Groceries',            'Monthly stock-up',  true),
+    tx(chkId, '2026-04-10', 'PSE&G',                   97.50, null, 'Electric & Gas',       'April bill',        true),
+    tx(chkId, '2026-04-14', 'Amazon',                  89.99, null, 'Shopping',             '',                  false),
+    tx(chkId, '2026-04-15', 'AT&T Internet',           69.99, null, 'Internet',             '',                  true),
+    tx(chkId, '2026-04-17', 'Target',                  52.38, null, 'Shopping',             '',                  false),
+
+    // ── April – Chase Sapphire ─────────────────────────────────────
+    tx(sapId, '2026-04-04', 'Uber Eats',               31.50, null, 'Dining out',           '',                  true),
+    tx(sapId, '2026-04-07', 'Hotel Indigo',            389.00, null, 'Travel',              'Conference stay',   true),
+    tx(sapId, '2026-04-08', 'Trader Joe\'s',            76.40, null, 'Groceries',           '',                  true),
+    tx(sapId, '2026-04-08', 'Spotify',                   9.99, null, 'My spending money',   '',                  true),
+    tx(sapId, '2026-04-12', 'Payment',                  null, 560.09, 'Credit Card Payments','',                 true),
+    tx(sapId, '2026-04-16', 'Starbucks',                 7.25, null, 'Dining out',          '',                  false),
+
+    // ── April – Discover It ────────────────────────────────────────
+    tx(disId, '2026-04-02', 'Target',                   54.22, null, 'Shopping',            '',                  true),
+    tx(disId, '2026-04-05', 'Payment',                  null, 263.05, 'Credit Card Payments','',                 true),
+    tx(disId, '2026-04-06', 'Best Buy',                139.05, null, 'Shopping',            '',                  true),
+    tx(disId, '2026-04-10', 'Chipotle',                 22.40, null, 'Dining out',          '',                  true),
+    tx(disId, '2026-04-12', 'Disney+',                  13.99, null, 'My spending money',   '',                  true),
+    tx(disId, '2026-04-18', 'Meijer',                   94.61, null, 'Groceries',           '',                  false),
+  ]
+
+  await supabase.from('transactions').insert(txRows)
+
+  // 6. Build and insert bill groups
+  const bgNeedsId = crypto.randomUUID()
+  const bgSubsId  = crypto.randomUUID()
+  const billGroupRows = [
+    { id: bgNeedsId, user_id: userId, name: 'Needs',         sort_order: 0, collapsed: false },
+    { id: bgSubsId,  user_id: userId, name: 'Subscriptions', sort_order: 1, collapsed: false },
+  ]
+  await supabase.from('bill_groups').insert(billGroupRows)
+
+  const billRows = [
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgNeedsId, name: 'Rent / Mortgage',  emoji: '🏠', account_id: chkId, frequency: 'monthly', amount: 1800.00, due_date: '2026-04-01', sort_order: 0 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgNeedsId, name: 'Electric & Gas',   emoji: '⚡', account_id: chkId, frequency: 'monthly', amount:   97.50, due_date: '2026-04-10', sort_order: 1 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgNeedsId, name: 'Internet',          emoji: '📡', account_id: chkId, frequency: 'monthly', amount:   69.99, due_date: '2026-04-15', sort_order: 2 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgNeedsId, name: 'Verizon Wireless',  emoji: '📱', account_id: chkId, frequency: 'monthly', amount:   45.00, due_date: '2026-04-01', sort_order: 3 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgNeedsId, name: 'GEICO Insurance',   emoji: '🛡️', account_id: chkId, frequency: 'monthly', amount:  185.00, due_date: '2026-04-05', sort_order: 4 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgSubsId,  name: 'Netflix',           emoji: '🎬', account_id: disId, frequency: 'monthly', amount:   15.99, due_date: '2026-04-23', sort_order: 0 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgSubsId,  name: 'Spotify',           emoji: '🎵', account_id: sapId, frequency: 'monthly', amount:    9.99, due_date: '2026-04-08', sort_order: 1 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgSubsId,  name: 'Disney+',           emoji: '🏰', account_id: disId, frequency: 'monthly', amount:   13.99, due_date: '2026-04-12', sort_order: 2 },
+    { id: crypto.randomUUID(), user_id: userId, group_id: bgSubsId,  name: 'iCloud+',           emoji: '☁️', account_id: chkId, frequency: 'monthly', amount:    2.99, due_date: '2026-04-20', sort_order: 3 },
+  ]
+  await supabase.from('bills').insert(billRows)
+
+  // 7. Return everything as app-layer types for state hydration
+  const accounts: Account[] = [
+    { id: chkId, name: 'Chase Checking',         type: 'checking' },
+    { id: savId, name: 'Ally High-Yield Savings', type: 'savings'  },
+    { id: sapId, name: 'Chase Sapphire Reserve',  type: 'credit'   },
+    { id: disId, name: 'Discover It Card',        type: 'credit'   },
+  ]
+
+  const catIdToName = new Map<string, string>()
+  budgetGroups.forEach(g => g.categories.forEach(c => catIdToName.set(c.id, c.name)))
+
+  const transactions: Transaction[] = txRows.map(row => ({
+    id: row.id,
+    accountId: row.account_id,
+    date: fromDbDate(row.date),
+    payee: row.payee,
+    category: row.category_id
+      ? (catIdToName.get(row.category_id) ?? null)
+      : (row.category_text ?? null),
+    memo: row.memo,
+    outflow: row.outflow,
+    inflow: row.inflow,
+    cleared: row.cleared,
+    reconciled: false,
+  }))
+
+  const billGroups: BillGroup[] = [
+    {
+      id: bgNeedsId,
+      name: 'Needs',
+      collapsed: false,
+      bills: billRows.filter(b => b.group_id === bgNeedsId).map(b => ({
+        id: b.id, name: b.name, emoji: b.emoji,
+        accountId: b.account_id ?? '',
+        frequency: b.frequency as BillFrequency,
+        amount: b.amount,
+        dueDate: b.due_date ?? '',
+      })),
+    },
+    {
+      id: bgSubsId,
+      name: 'Subscriptions',
+      collapsed: false,
+      bills: billRows.filter(b => b.group_id === bgSubsId).map(b => ({
+        id: b.id, name: b.name, emoji: b.emoji,
+        accountId: b.account_id ?? '',
+        frequency: b.frequency as BillFrequency,
+        amount: b.amount,
+        dueDate: b.due_date ?? '',
+      })),
+    },
+  ]
+
+  return { budgetGroups, accounts, transactions, billGroups }
+}
+
+// ── Reset all user data ───────────────────────────────────────────
+
+export async function resetUserData(userId: string): Promise<void> {
+  // Delete in order that respects foreign key constraints
+  await supabase.from('transactions').delete().eq('user_id', userId)
+  await supabase.from('budget_months').delete().eq('user_id', userId)
+  await supabase.from('bills').delete().eq('user_id', userId)
+  await supabase.from('bill_groups').delete().eq('user_id', userId)
+  await supabase.from('categories').delete().eq('user_id', userId)
+  await supabase.from('category_groups').delete().eq('user_id', userId)
+  await supabase.from('accounts').delete().eq('user_id', userId)
+}
+
 // ── Bills ─────────────────────────────────────────────────────────
 
 export async function saveBillGroups(userId: string, groups: BillGroup[]): Promise<void> {
