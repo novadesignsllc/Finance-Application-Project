@@ -211,7 +211,10 @@ function BudgetApp() {
   // ── Load all data on mount ──────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
+      if (!user) {
+        setLoading(false)
+        return
+      }
       userId.current = user.id
       try {
         const [data, profileName] = await Promise.all([loadAll(user.id), loadProfile(user.id)])
@@ -236,6 +239,9 @@ function BudgetApp() {
         setDataReady(true)
         setLoading(false)
       }
+    }).catch(e => {
+      console.error('Failed to get user:', e)
+      setLoading(false)
     })
   }, [])
 
@@ -250,9 +256,15 @@ function BudgetApp() {
     if (withPlaceholder) {
       setShowOnboarding(false)
       setSeeding(true)
-      await seedSampleData(uid)
-      localStorage.setItem(`onboarding_complete_${uid}`, 'true')
-      window.location.reload()
+      try {
+        await seedSampleData(uid)
+        localStorage.setItem(`onboarding_complete_${uid}`, 'true')
+        window.location.reload()
+      } catch (err) {
+        console.error('seedSampleData failed:', err)
+        setSeeding(false)
+        setShowOnboarding(true)
+      }
       return
     }
     localStorage.setItem(`onboarding_complete_${uid}`, 'true')
@@ -297,7 +309,12 @@ function BudgetApp() {
     const uid = userId.current
     if (groupsSaveTimer.current) clearTimeout(groupsSaveTimer.current)
     groupsSaveTimer.current = setTimeout(() => {
-      saveGroups(uid, budgetGroups).catch(console.error)
+      // Filter out synthetic groups (CC payments, bills) — these have non-UUID IDs
+      // and are derived from account/bill state, not stored directly in the DB.
+      const persistableGroups = budgetGroups.filter(
+        g => g.id !== CC_GROUP_ID && g.id !== BILLS_GROUP_ID
+      )
+      saveGroups(uid, persistableGroups).catch(console.error)
     }, 600)
   }, [budgetGroups])
 

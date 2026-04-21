@@ -4,8 +4,10 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- 1. Add missing columns to categories
---    (debt_payoff_date was never persisted; archived flag for deleted bill categories)
+--    (plan: stores goal/spending plan as JSON; debt_payoff_date for CC payoff tracking;
+--     archived flag for deleted bill categories)
 alter table categories
+  add column if not exists plan jsonb,
   add column if not exists debt_payoff_date date,
   add column if not exists archived boolean not null default false;
 
