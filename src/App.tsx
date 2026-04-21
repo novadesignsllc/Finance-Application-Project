@@ -263,14 +263,8 @@ function BudgetApp() {
     const uid = userId.current
     if (!uid) return
     await resetUserData(uid)
-    setBudgetGroups([])
-    setAccounts([])
-    setTransactions([])
-    setClosedAccountIds(new Set())
-    setMonthlyAssigned({})
-    setBillGroups([])
     localStorage.removeItem(`onboarding_complete_${uid}`)
-    setShowOnboarding(true)
+    await supabase.auth.signOut()
   }
 
   // ── Sync transactions to Supabase on change ─────────────────────
