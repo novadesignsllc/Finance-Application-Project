@@ -1,7 +1,58 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Finance App — missing persistence migrations
 -- Run this entire script once in the Supabase SQL editor
+-- Safe to re-run: all statements use IF NOT EXISTS / OR REPLACE / DROP IF EXISTS
 -- ─────────────────────────────────────────────────────────────────────────────
+
+-- ── Row Level Security ────────────────────────────────────────────────────────
+-- Every table must have RLS enabled so users can only access their own rows.
+-- Without this any authenticated user can read/write any other user's data.
+
+alter table accounts       enable row level security;
+alter table transactions   enable row level security;
+alter table category_groups enable row level security;
+alter table categories     enable row level security;
+alter table budget_months  enable row level security;
+alter table profiles       enable row level security;
+
+drop policy if exists "Users manage own accounts"         on accounts;
+drop policy if exists "Users manage own transactions"     on transactions;
+drop policy if exists "Users manage own category groups"  on category_groups;
+drop policy if exists "Users manage own categories"       on categories;
+drop policy if exists "Users manage own budget months"    on budget_months;
+drop policy if exists "Users manage own profile"          on profiles;
+
+create policy "Users manage own accounts"
+  on accounts for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own transactions"
+  on transactions for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own category groups"
+  on category_groups for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own categories"
+  on categories for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own budget months"
+  on budget_months for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own profile"
+  on profiles for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- ── Column additions ──────────────────────────────────────────────────────────
 
 -- 1. Add missing columns to categories
 --    (plan: stores goal/spending plan as JSON; debt_payoff_date for CC payoff tracking;
