@@ -62,8 +62,6 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
     const handler = (e: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
         setShowSettings(false)
-        setResetPhase(0)
-        setResetText('')
       }
     }
     if (showSettings) document.addEventListener('mousedown', handler)
