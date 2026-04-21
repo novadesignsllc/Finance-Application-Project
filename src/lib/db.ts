@@ -228,6 +228,8 @@ export async function saveAssigned(
   monthKey: string, // 'YYYY-MM'
   assigned: number,
 ): Promise<void> {
+  // Synthetic category IDs (e.g. cc-payment-<accountId>) are not real DB UUIDs — skip them
+  if (!UUID_RE.test(catId)) return
   await supabase.from('budget_months').upsert(
     { user_id: userId, category_id: catId, month: `${monthKey}-01`, assigned },
     { onConflict: 'user_id,category_id,month' }
