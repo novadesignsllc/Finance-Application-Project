@@ -24,6 +24,8 @@ interface SidebarProps {
   transactions: Transaction[]
   closedAccountIds: Set<string>
   onResetAccount: () => Promise<void>
+  displayName: string
+  onDisplayNameChange: (name: string) => void
 }
 
 function buildGradient(colors: string[]): string {
@@ -32,7 +34,7 @@ function buildGradient(colors: string[]): string {
   return `linear-gradient(to bottom, ${stops.join(', ')})`
 }
 
-export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggle, gradientColors, onGradientChange, width, selectedAccountId, onAccountSelect, onAddAccount, accounts, onAccountsChange, transactions, closedAccountIds, onResetAccount }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggle, gradientColors, onGradientChange, width, selectedAccountId, onAccountSelect, onAddAccount, accounts, onAccountsChange, transactions, closedAccountIds, onResetAccount, displayName, onDisplayNameChange }: SidebarProps) {
   const setAccounts = onAccountsChange
   const [showSettings, setShowSettings] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
@@ -327,6 +329,23 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
                 boxShadow: '0 -8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(109,40,217,0.2)',
               }}
             >
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>
+                Display Name
+              </p>
+              <input
+                value={displayName}
+                onChange={e => onDisplayNameChange(e.target.value)}
+                placeholder="Enter your name"
+                className="w-full px-3 py-2 text-sm rounded-xl outline-none mb-4"
+                style={{
+                  background: 'var(--bg-hover)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--text-primary)',
+                }}
+                onFocus={e => (e.currentTarget.style.border = '1px solid rgba(109,40,217,0.5)')}
+                onBlur={e => (e.currentTarget.style.border = '1px solid var(--color-border)')}
+              />
+
               <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-faint)' }}>
                 Appearance
               </p>

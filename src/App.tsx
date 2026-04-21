@@ -13,7 +13,7 @@ import IncomeView from './components/IncomeView'
 import LoginPage from './components/LoginPage'
 import OnboardingModal from './components/OnboardingModal'
 import { supabase } from './lib/supabase'
-import { loadAll, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups } from './lib/db'
+import { loadAll, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups, saveProfile, loadProfile } from './lib/db'
 import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
 import { toMonthly, getNextPaymentDate } from './data/billData'
 import type { BillGroup, BillFrequency } from './data/billData'
@@ -201,6 +201,7 @@ function BudgetApp() {
   }, [transactions, dataReady])
 
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [displayName, setDisplayName] = useState('')
 
   const isResizing = useRef(false)
   const userId = useRef<string | null>(null)
@@ -212,7 +213,8 @@ function BudgetApp() {
       if (!user) return
       userId.current = user.id
       try {
-        const data = await loadAll(user.id)
+        const [data, profileName] = await Promise.all([loadAll(user.id), loadProfile(user.id)])
+        if (profileName) setDisplayName(profileName)
         // New user: no data and onboarding not previously completed → show choice screen
         const onboardingDone = !!localStorage.getItem(`onboarding_complete_${user.id}`)
         const isNewUser = data.budgetGroups.length === 0 && data.accounts.length === 0 && !onboardingDone
@@ -237,9 +239,13 @@ function BudgetApp() {
   }, [])
 
   // ── Onboarding: user chose placeholder data or clean slate ──────
-  async function handleOnboardingChoice(withPlaceholder: boolean) {
+  async function handleOnboardingChoice(withPlaceholder: boolean, name: string) {
     const uid = userId.current
     if (!uid) return
+    if (name) {
+      setDisplayName(name)
+      saveProfile(uid, name).catch(console.error)
+    }
     if (withPlaceholder) {
       const seeded = await seedSampleData(uid)
       setBudgetGroups(seeded.budgetGroups)
@@ -817,6 +823,11 @@ function BudgetApp() {
         transactions={transactions}
         closedAccountIds={closedAccountIds}
         onResetAccount={handleResetAccount}
+        displayName={displayName}
+        onDisplayNameChange={name => {
+          setDisplayName(name)
+          if (userId.current) saveProfile(userId.current, name).catch(console.error)
+        }}
       />
 
       {/* Resize handle */}

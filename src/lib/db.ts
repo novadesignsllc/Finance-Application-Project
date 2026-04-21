@@ -561,6 +561,17 @@ export async function seedSampleData(userId: string): Promise<{
   return { budgetGroups, accounts, transactions, billGroups, monthlyAssigned }
 }
 
+// ── User profile ──────────────────────────────────────────────────
+
+export async function saveProfile(userId: string, displayName: string): Promise<void> {
+  await supabase.from('profiles').upsert({ user_id: userId, display_name: displayName })
+}
+
+export async function loadProfile(userId: string): Promise<string | null> {
+  const { data } = await supabase.from('profiles').select('display_name').eq('user_id', userId).single()
+  return data?.display_name ?? null
+}
+
 // ── Reset all user data ───────────────────────────────────────────
 
 export async function resetUserData(userId: string): Promise<void> {
