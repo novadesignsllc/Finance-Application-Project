@@ -249,16 +249,17 @@ function BudgetApp() {
   async function handleOnboardingChoice(withPlaceholder: boolean, name: string) {
     const uid = userId.current
     if (!uid) return
-    if (name) {
-      setDisplayName(name)
-      saveProfile(uid, name).catch(console.error)
-    }
     if (withPlaceholder) {
       setShowOnboarding(false)
       setSeeding(true)
       try {
         await resetUserData(uid)  // clear any partial data from a previous failed attempt
         await seedSampleData(uid)
+        // Save profile after seeding succeeds so resetUserData can't race-delete it
+        if (name) {
+          setDisplayName(name)
+          await saveProfile(uid, name)
+        }
         localStorage.setItem(`onboarding_complete_${uid}`, 'true')
         window.location.reload()
       } catch (err) {
@@ -267,6 +268,11 @@ function BudgetApp() {
         setShowOnboarding(true)
       }
       return
+    }
+    // Clean slate path — no reset, just record the name and proceed
+    if (name) {
+      setDisplayName(name)
+      saveProfile(uid, name).catch(console.error)
     }
     localStorage.setItem(`onboarding_complete_${uid}`, 'true')
     setShowOnboarding(false)

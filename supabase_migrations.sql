@@ -11,6 +11,15 @@ alter table categories
   add column if not exists debt_payoff_date date,
   add column if not exists archived boolean not null default false;
 
+-- 2. Add missing columns to transactions
+--    (category_text: fallback for categories not in the budget table;
+--     reconciled: lock flag; repeat: recurring interval; is_starting_balance: UI hint)
+alter table transactions
+  add column if not exists category_text text,
+  add column if not exists reconciled boolean not null default false,
+  add column if not exists repeat text,
+  add column if not exists is_starting_balance boolean not null default false;
+
 -- 2. Bill groups table
 create table if not exists bill_groups (
   id          text        primary key,
