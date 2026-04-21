@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 interface DatePickerButtonProps {
   /** ISO date string: YYYY-MM-DD, or '' for unset */
@@ -27,13 +28,20 @@ export default function DatePickerButton({
     }
     return new Date()
   })
-  const ref = useRef<HTMLDivElement>(null)
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 256 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
 
   // Close on outside click
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        popupRef.current && !popupRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -46,6 +54,21 @@ export default function DatePickerButton({
       setCalView(new Date(y, m - 1, 1))
     }
   }, [value])
+
+  const openPopup = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      const popupH = 300 // approximate
+      const spaceBelow = window.innerHeight - rect.bottom
+      const shouldOpenUp = openUp || spaceBelow < popupH
+      if (shouldOpenUp) {
+        setPopupPos({ top: rect.top - popupH - 4, left: rect.left, width: rect.width })
+      } else {
+        setPopupPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      }
+    }
+    setOpen(p => !p)
+  }
 
   // Parse selected parts from ISO value
   const selYear  = value ? parseInt(value.split('-')[0]) : -1
@@ -79,11 +102,12 @@ export default function DatePickerButton({
   }
 
   return (
-    <div ref={ref} className={`relative ${className ?? ''}`} style={style}>
+    <div className={`relative ${className ?? ''}`} style={style}>
       {/* Trigger button */}
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen(p => !p)}
+        onClick={openPopup}
         className="px-2.5 py-1.5 text-sm rounded-xl w-full text-left transition-all"
         style={{
           background: open ? 'rgba(109,40,217,0.25)' : 'var(--bg-hover-strong)',
@@ -94,16 +118,20 @@ export default function DatePickerButton({
         {displayLabel}
       </button>
 
-      {/* Calendar popup */}
-      {open && (
+      {/* Calendar popup — rendered via portal to escape overflow:hidden containers */}
+      {open && createPortal(
         <div
-          className="absolute left-0 z-50 rounded-2xl p-3 select-none"
+          ref={popupRef}
+          className="rounded-2xl p-3 select-none"
           style={{
-            ...(openUp ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+            position: 'fixed',
+            top: popupPos.top,
+            left: popupPos.left,
+            minWidth: '256px',
+            zIndex: 9999,
             background: 'var(--bg-surface)',
             border: '1px solid rgba(109,40,217,0.3)',
             boxShadow: '0 16px 48px rgba(0,0,0,0.45)',
-            minWidth: '256px',
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -178,7 +206,8 @@ export default function DatePickerButton({
               Today
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

@@ -639,6 +639,14 @@ export async function syncCCPaymentGroup(
   return result
 }
 
+// ── Delete a single category ──────────────────────────────────────
+
+export async function deleteCategory(catId: string): Promise<void> {
+  // Remove allocations first (FK), then the category row itself
+  await supabase.from('budget_months').delete().eq('category_id', catId)
+  await supabase.from('categories').delete().eq('id', catId)
+}
+
 // ── User profile ──────────────────────────────────────────────────
 
 export async function saveProfile(userId: string, displayName: string): Promise<void> {

@@ -13,7 +13,7 @@ import IncomeView from './components/IncomeView'
 import LoginPage from './components/LoginPage'
 import OnboardingModal from './components/OnboardingModal'
 import { supabase } from './lib/supabase'
-import { loadAll, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups, saveProfile, saveGradientColors, loadProfile, syncCCPaymentGroup } from './lib/db'
+import { loadAll, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups, saveProfile, saveGradientColors, loadProfile, syncCCPaymentGroup, deleteCategory } from './lib/db'
 import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
 import { toMonthly, getNextPaymentDate } from './data/billData'
 import type { BillGroup, BillFrequency } from './data/billData'
@@ -465,6 +465,24 @@ function BudgetApp() {
       ...g,
       categories: g.categories.map(c => c.id === catId ? { ...c, plan } : c),
     })))
+  }
+
+  const onDeleteCategory = (catId: string) => {
+    setBudgetGroups(prev =>
+      prev.map(g => ({ ...g, categories: g.categories.filter(c => c.id !== catId) }))
+    )
+    setMonthlyAssigned(prev => {
+      const next = { ...prev }
+      for (const mk of Object.keys(next)) {
+        if (catId in next[mk]) {
+          next[mk] = { ...next[mk] }
+          delete next[mk][catId]
+        }
+      }
+      return next
+    })
+    setSelectedCategoryId(null)
+    if (userId.current) trackSave(deleteCategory(catId).catch(console.error))
   }
 
   const onDebtPayoffChange = (catId: string, date: string | undefined) => {
@@ -1053,7 +1071,7 @@ function BudgetApp() {
                   transactions={transactions}
                   budgetMonth={budgetMonth}
                 />
-                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
+                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} onDeleteCategory={onDeleteCategory} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
               </>
             )}
           </div>

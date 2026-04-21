@@ -7,6 +7,7 @@ interface InspectorPanelProps {
   onPlanChange: (catId: string, plan: CategoryPlan | undefined) => void
   onAssignedChange: (catId: string, value: number) => void
   onDebtPayoffChange: (catId: string, date: string | undefined) => void
+  onDeleteCategory: (catId: string) => void
   monthlyAssigned: Record<string, Record<string, number>>
   budgetMonth: { year: number; month: number }
 }
@@ -22,7 +23,7 @@ const fmt = (n: number) =>
 
 const MONTH_LETTERS = ['J','F','M','A','M','J','J','A','S','O','N','D']
 
-export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
+export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
   const [makingPlan, setMakingPlan] = useState(false)
   const [selectedType, setSelectedType] = useState<PlanType | null>(null)
   const [monthlyAmount, setMonthlyAmount] = useState('')
@@ -30,6 +31,7 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
   const [goalDate, setGoalDate] = useState('')
   const [editingDebtPayoff, setEditingDebtPayoff] = useState(false)
   const [debtPayoffInput, setDebtPayoffInput] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Reset plan editor when category changes
   useEffect(() => {
@@ -40,6 +42,7 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
     setGoalDate('')
     setEditingDebtPayoff(false)
     setDebtPayoffInput('')
+    setConfirmDelete(false)
   }, [category?.id])
 
   // Pre-fill when editing existing plan
@@ -398,7 +401,7 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
       </div>
 
       {/* Make A Plan */}
-      <div className="p-4 flex-1">
+      <div className="p-4 flex-1" style={{ paddingBottom: 0 }}>
         <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-faint)' }}>
           Make A Plan
         </p>
@@ -702,6 +705,46 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
           </div>
         )}
       </div>
+
+      {/* Delete category — only for regular (non-bill) categories */}
+      {!category.id.startsWith('bill-category-') && (
+        <div className="px-4 py-4" style={{ borderTop: '1px solid var(--color-border)', marginTop: 'auto' }}>
+          {confirmDelete ? (
+            <div className="rounded-xl p-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <p className="text-xs font-semibold mb-1" style={{ color: '#f87171' }}>Delete this category?</p>
+              <p className="text-xs mb-3" style={{ color: 'var(--text-faint)' }}>
+                Removes the category and all its allocations. Transactions keep their category name but won't match a budget group.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+                >Cancel</button>
+                <button
+                  onClick={() => onDeleteCategory(category.id)}
+                  className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{ background: 'rgba(239,68,68,0.75)', color: 'white' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.9)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.75)')}
+                >Delete</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full py-1.5 text-xs font-medium rounded-lg transition-all"
+              style={{ color: 'rgba(239,68,68,0.6)' }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(239,68,68,0.6)'; e.currentTarget.style.background = 'transparent' }}
+            >
+              Delete Category
+            </button>
+          )}
+        </div>
+      )}
     </aside>
   )
 }
