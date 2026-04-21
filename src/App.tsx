@@ -13,7 +13,7 @@ import IncomeView from './components/IncomeView'
 import LoginPage from './components/LoginPage'
 import OnboardingModal from './components/OnboardingModal'
 import { supabase } from './lib/supabase'
-import { loadAll, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups, saveProfile, saveGradientColors, loadProfile } from './lib/db'
+import { loadAll, seedSampleData, resetUserData, saveAccount, setAccountClosed, removeAccount, saveGroups, saveAssigned, saveTransaction, removeTransaction, saveBillGroups, saveProfile, saveGradientColors, loadProfile, syncCCPaymentGroup } from './lib/db'
 import type { CategoryGroup, Transaction, CategoryPlan } from './data/mockData'
 import { toMonthly, getNextPaymentDate } from './data/billData'
 import type { BillGroup, BillFrequency } from './data/billData'
@@ -223,6 +223,8 @@ function BudgetApp() {
   const isResizing = useRef(false)
   const userId = useRef<string | null>(null)
   const dataLoaded = useRef(false)
+  // accountId → real DB categoryId for CC payment categories
+  const ccCatIds = useRef<Map<string, string>>(new Map())
 
   // ── Load all data on mount ──────────────────────────────────────
   useEffect(() => {
@@ -239,13 +241,23 @@ function BudgetApp() {
           setGradientColors(profile.gradientColors)
           localStorage.setItem('gradientColors', JSON.stringify(profile.gradientColors))
         }
+
+        // Sync CC payment categories to DB and populate the accountId → categoryUUID map
+        // Must happen before state is set so the useEffect([accounts]) fires with real IDs ready
+        const ccAccounts = data.accounts.filter(a => a.type === 'credit')
+        if (ccAccounts.length > 0) {
+          const ids = await syncCCPaymentGroup(user.id, ccAccounts)
+          ids.forEach((catId, accId) => ccCatIds.current.set(accId, catId))
+        }
+
         // New user: no data and onboarding not previously completed → show choice screen
         const onboardingDone = !!localStorage.getItem(`onboarding_complete_${user.id}`)
         const isNewUser = data.budgetGroups.length === 0 && data.accounts.length === 0 && !onboardingDone
         if (isNewUser) {
           setShowOnboarding(true)
         } else {
-          setBudgetGroups(data.budgetGroups)
+          // Filter out the CC payment group — it's rebuilt synthetically from accounts
+          setBudgetGroups(data.budgetGroups.filter(g => g.name !== 'Credit Card Payments'))
         }
         setAccounts(data.accounts)
         setTransactions(data.transactions)
@@ -404,16 +416,20 @@ function BudgetApp() {
 
   // ── Auto-sync Credit Card Payment categories ───────────────────
   useEffect(() => {
-    if (!dataLoaded.current) return
+    if (!dataLoaded.current || !userId.current) return
+    const uid = userId.current
     const openCC = accounts.filter(a => a.type === 'credit' && !closedAccountIds.has(a.id))
-    setBudgetGroups(prev => {
+
+    const rebuild = () => setBudgetGroups(prev => {
       const existing = prev.find(g => g.id === CC_GROUP_ID)
       if (openCC.length === 0) {
         return existing ? prev.filter(g => g.id !== CC_GROUP_ID) : prev
       }
       const desiredCats = openCC.map(a => {
-        const found = existing?.categories.find(c => c.id === `cc-payment-${a.id}`)
-        return found ?? { id: `cc-payment-${a.id}`, name: a.name, emoji: '💳', assigned: 0, activity: 0, available: 0 }
+        // Use the real DB UUID if available, fall back to synthetic ID
+        const realId = ccCatIds.current.get(a.id) ?? `cc-payment-${a.id}`
+        const found = existing?.categories.find(c => c.id === realId)
+        return found ?? { id: realId, name: a.name, emoji: '💳', assigned: 0, activity: 0, available: 0 }
       })
       const alreadySynced = existing &&
         existing.categories.length === desiredCats.length &&
@@ -422,6 +438,17 @@ function BudgetApp() {
       const newGroup = { id: CC_GROUP_ID, name: CC_GROUP_NAME, categories: desiredCats }
       return existing ? prev.map(g => g.id === CC_GROUP_ID ? newGroup : g) : [newGroup, ...prev]
     })
+
+    // If any CC account doesn't have a real DB category yet (e.g. newly added), sync first
+    const missing = openCC.filter(a => !ccCatIds.current.has(a.id))
+    if (missing.length > 0) {
+      syncCCPaymentGroup(uid, openCC).then(newIds => {
+        newIds.forEach((catId, accId) => ccCatIds.current.set(accId, catId))
+        rebuild()
+      })
+    } else {
+      rebuild()
+    }
   }, [accounts, closedAccountIds])
 
   const monthKey = `${budgetMonth.year}-${String(budgetMonth.month).padStart(2, '0')}`

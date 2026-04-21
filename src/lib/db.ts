@@ -568,6 +568,74 @@ export async function seedSampleData(userId: string): Promise<{
   return { budgetGroups, accounts, transactions, billGroups, monthlyAssigned }
 }
 
+// ── CC payment category sync ──────────────────────────────────────
+// CC payment categories are synthetic in state (id: cc-payment-<accountId>)
+// but must exist as real DB rows for budget_months allocations to persist.
+// This function idempotently creates the group + per-account categories and
+// returns a map of accountId → real DB categoryId (UUID).
+
+export async function syncCCPaymentGroup(
+  userId: string,
+  ccAccounts: Account[],
+): Promise<Map<string, string>> {
+  if (ccAccounts.length === 0) return new Map()
+
+  // 1. Find or create the "Credit Card Payments" group
+  const { data: existingGroup } = await supabase
+    .from('category_groups')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('name', 'Credit Card Payments')
+    .maybeSingle()
+
+  let groupId: string
+  if (existingGroup?.id) {
+    groupId = existingGroup.id as string
+  } else {
+    const { data: newGroup, error } = await supabase
+      .from('category_groups')
+      .insert({ user_id: userId, name: 'Credit Card Payments', sort_order: 9999 })
+      .select('id')
+      .single()
+    if (error || !newGroup) return new Map()
+    groupId = newGroup.id as string
+  }
+
+  // 2. Load existing categories in this group
+  const { data: existingCats } = await supabase
+    .from('categories')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('group_id', groupId)
+
+  const catByName = new Map<string, string>()
+  ;(existingCats ?? []).forEach(c => catByName.set(c.name as string, c.id as string))
+
+  // 3. Create any missing categories
+  const toCreate = ccAccounts.filter(a => !catByName.has(a.name))
+  if (toCreate.length > 0) {
+    const { data: created } = await supabase
+      .from('categories')
+      .insert(toCreate.map((a, i) => ({
+        user_id: userId,
+        group_id: groupId,
+        name: a.name,
+        emoji: '💳',
+        sort_order: i,
+      })))
+      .select('id, name')
+    ;(created ?? []).forEach(c => catByName.set(c.name as string, c.id as string))
+  }
+
+  // 4. Build accountId → categoryId map
+  const result = new Map<string, string>()
+  ccAccounts.forEach(a => {
+    const catId = catByName.get(a.name)
+    if (catId) result.set(a.id, catId)
+  })
+  return result
+}
+
 // ── User profile ──────────────────────────────────────────────────
 
 export async function saveProfile(userId: string, displayName: string): Promise<void> {
