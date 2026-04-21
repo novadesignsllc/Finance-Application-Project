@@ -257,6 +257,7 @@ function BudgetApp() {
       setShowOnboarding(false)
       setSeeding(true)
       try {
+        await resetUserData(uid)  // clear any partial data from a previous failed attempt
         await seedSampleData(uid)
         localStorage.setItem(`onboarding_complete_${uid}`, 'true')
         window.location.reload()
