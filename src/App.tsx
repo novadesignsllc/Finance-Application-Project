@@ -118,6 +118,22 @@ function BudgetApp() {
   const [dataReady, setDataReady] = useState(false)
   const [billGroups, setBillGroups] = useState<BillGroup[]>([])
   const [appToast, setAppToast] = useState<{ title: string; subtitle: string } | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const pendingSaves = useRef(0)
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const trackSave = useCallback((p: Promise<unknown>) => {
+    pendingSaves.current += 1
+    setSaveStatus('saving')
+    p.finally(() => {
+      pendingSaves.current -= 1
+      if (pendingSaves.current === 0) {
+        setSaveStatus('saved')
+        if (savedTimer.current) clearTimeout(savedTimer.current)
+        savedTimer.current = setTimeout(() => setSaveStatus('idle'), 2000)
+      }
+    })
+  }, [])
 
   const billLinkedTxIds = useMemo(
     () => new Set(billGroups.flatMap(g => g.bills.flatMap(b => b.linkedTransactionId ? [b.linkedTransactionId] : []))),
@@ -304,8 +320,8 @@ function BudgetApp() {
     })
     const deleted = prev.filter(p => !curr.find(c => c.id === p.id))
 
-    changed.forEach(tx => saveTransaction(uid, tx, catNameToId).catch(console.error))
-    deleted.forEach(tx => removeTransaction(tx.id).catch(console.error))
+    changed.forEach(tx => trackSave(saveTransaction(uid, tx, catNameToId).catch(console.error)))
+    deleted.forEach(tx => trackSave(removeTransaction(tx.id).catch(console.error)))
     prevTransactions.current = curr
   }, [transactions])
 
@@ -321,7 +337,7 @@ function BudgetApp() {
       const persistableGroups = budgetGroups.filter(
         g => g.id !== CC_GROUP_ID && g.id !== BILLS_GROUP_ID
       )
-      saveGroups(uid, persistableGroups).catch(console.error)
+      trackSave(saveGroups(uid, persistableGroups).catch(console.error))
     }, 600)
   }, [budgetGroups])
 
@@ -332,7 +348,7 @@ function BudgetApp() {
     const uid = userId.current
     if (billsSaveTimer.current) clearTimeout(billsSaveTimer.current)
     billsSaveTimer.current = setTimeout(() => {
-      saveBillGroups(uid, billGroups).catch(console.error)
+      trackSave(saveBillGroups(uid, billGroups).catch(console.error))
     }, 600)
   }, [billGroups])
 
@@ -434,7 +450,7 @@ function BudgetApp() {
       ...prev,
       [monthKey]: { ...prev[monthKey], [catId]: value },
     }))
-    if (userId.current) saveAssigned(userId.current, catId, monthKey, value).catch(console.error)
+    if (userId.current) trackSave(saveAssigned(userId.current, catId, monthKey, value).catch(console.error))
   }
 
   const undoAssigned = useCallback(() => {
@@ -802,7 +818,7 @@ function BudgetApp() {
     }
     setAccounts(prev => {
       const next = [...prev, account]
-      if (userId.current) saveAccount(userId.current, account, next.length - 1).catch(console.error)
+      if (userId.current) trackSave(saveAccount(userId.current, account, next.length - 1).catch(console.error))
       return next
     })
     setTransactions(prev => [...prev, startingTx])
@@ -855,7 +871,7 @@ function BudgetApp() {
         displayName={displayName}
         onDisplayNameChange={name => {
           setDisplayName(name)
-          if (userId.current) saveProfile(userId.current, name).catch(console.error)
+          if (userId.current) trackSave(saveProfile(userId.current, name).catch(console.error))
         }}
       />
 
@@ -915,7 +931,7 @@ function BudgetApp() {
                   onCloseAccount={id => {
                     setClosedAccountIds(prev => new Set([...prev, id]))
                     setSelectedAccountId(null)
-                    if (userId.current) setAccountClosed(id, true).catch(console.error)
+                    if (userId.current) trackSave(setAccountClosed(id, true).catch(console.error))
                   }}
                   budgetGroups={budgetGroups}
                   gradientColors={gradientColors}
@@ -924,14 +940,14 @@ function BudgetApp() {
                     setAccounts(prev => prev.map(a => a.id === id ? { ...a, name } : a))
                     if (userId.current) {
                       const updated = accounts.find(a => a.id === id)
-                      if (updated) saveAccount(userId.current, { ...updated, name }, accounts.findIndex(a => a.id === id)).catch(console.error)
+                      if (updated) trackSave(saveAccount(userId.current, { ...updated, name }, accounts.findIndex(a => a.id === id)).catch(console.error))
                     }
                   }}
                   onDeleteAccount={id => {
                     setAccounts(prev => prev.filter(a => a.id !== id))
                     setClosedAccountIds(prev => { const n = new Set(prev); n.delete(id); return n })
                     setSelectedAccountId(null)
-                    removeAccount(id).catch(console.error)
+                    trackSave(removeAccount(id).catch(console.error))
                   }}
                 />
               </div>
@@ -999,6 +1015,46 @@ function BudgetApp() {
           </div>
         </div>
       </div>
+
+      {/* Save indicator — bottom-right corner */}
+      {saveStatus !== 'idle' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            right: '16px',
+            zIndex: 9998,
+            width: '26px',
+            height: '26px',
+            borderRadius: '50%',
+            background: 'var(--bg-surface)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'opacity 0.2s',
+          }}
+        >
+          {saveStatus === 'saving' ? (
+            <div
+              className="animate-spin"
+              style={{
+                width: '13px',
+                height: '13px',
+                borderRadius: '50%',
+                border: '2px solid rgba(109,40,217,0.25)',
+                borderTopColor: '#a78bfa',
+              }}
+            />
+          ) : (
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+              <path d="M1.5 5.5l3 3 5-5" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>,
+        document.body
+      )}
 
       {/* App-level toast — transaction→bill sync notification */}
       {appToast && createPortal(
