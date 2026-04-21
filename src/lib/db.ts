@@ -581,16 +581,19 @@ export async function syncCCPaymentGroup(
   if (ccAccounts.length === 0) return new Map()
 
   // 1. Find or create the "Credit Card Payments" group
-  const { data: existingGroup } = await supabase
+  const { data: foundGroups } = await supabase
     .from('category_groups')
     .select('id')
     .eq('user_id', userId)
     .eq('name', 'Credit Card Payments')
-    .maybeSingle()
+    .limit(1)
+
+  const existingGroupId = Array.isArray(foundGroups) && foundGroups.length > 0
+    ? (foundGroups[0].id as string) : null
 
   let groupId: string
-  if (existingGroup?.id) {
-    groupId = existingGroup.id as string
+  if (existingGroupId) {
+    groupId = existingGroupId
   } else {
     const { data: newGroup, error } = await supabase
       .from('category_groups')

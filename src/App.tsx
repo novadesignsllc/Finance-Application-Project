@@ -242,12 +242,16 @@ function BudgetApp() {
           localStorage.setItem('gradientColors', JSON.stringify(profile.gradientColors))
         }
 
-        // Sync CC payment categories to DB and populate the accountId → categoryUUID map
-        // Must happen before state is set so the useEffect([accounts]) fires with real IDs ready
+        // Sync CC payment categories to DB — wrapped in its own try/catch so any
+        // failure here never blocks the main data load from setting state
         const ccAccounts = data.accounts.filter(a => a.type === 'credit')
         if (ccAccounts.length > 0) {
-          const ids = await syncCCPaymentGroup(user.id, ccAccounts)
-          ids.forEach((catId, accId) => ccCatIds.current.set(accId, catId))
+          try {
+            const ids = await syncCCPaymentGroup(user.id, ccAccounts)
+            ids.forEach((catId, accId) => ccCatIds.current.set(accId, catId))
+          } catch (e) {
+            console.error('syncCCPaymentGroup failed — CC allocations will not persist:', e)
+          }
         }
 
         // New user: no data and onboarding not previously completed → show choice screen
@@ -511,9 +515,14 @@ function BudgetApp() {
 
   // Compute activity/available with rollover — available from month N carries into month N+1
   const budgetGroupsWithActivity = useMemo(() => {
-    // Build map of CC payment category ID → account ID for special activity calculation
+    // Build map of CC payment category ID → account ID for special activity calculation.
+    // Use real DB UUIDs from ccCatIds when available; fall back to synthetic IDs for
+    // any accounts not yet synced (e.g. before the first syncCCPaymentGroup resolves).
     const ccPaymentMap = new Map<string, string>()
-    accounts.filter(a => a.type === 'credit').forEach(a => ccPaymentMap.set(`cc-payment-${a.id}`, a.id))
+    accounts.filter(a => a.type === 'credit').forEach(a => {
+      const realId = ccCatIds.current.get(a.id)
+      ccPaymentMap.set(realId ?? `cc-payment-${a.id}`, a.id)
+    })
 
     // Build sidebar account order for CC category sorting
     const accountOrder = new Map<string, number>()
