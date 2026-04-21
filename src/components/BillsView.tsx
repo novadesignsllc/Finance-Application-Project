@@ -82,7 +82,7 @@ interface BillRowProps {
   gradientColors: string[]
 }
 
-function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, accounts, gradientColors }: BillRowProps) {
+function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, onDelete, accounts, gradientColors }: BillRowProps) {
   const gradient = gradientColors.length === 1
     ? gradientColors[0]
     : `linear-gradient(135deg, ${gradientColors.join(', ')})`
@@ -95,6 +95,7 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, acco
   const [accountId, setAccountId] = useState(bill.accountId)
   const [dueDate, setDueDate] = useState(bill.dueDate ?? '')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Reset draft whenever this row enters edit mode
   useEffect(() => {
@@ -106,6 +107,7 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, acco
       setAccountId(bill.accountId)
       setDueDate(bill.dueDate ?? '')
       setShowEmojiPicker(false)
+      setConfirmDelete(false)
     }
   }, [isSelected, bill.id])
 
@@ -325,27 +327,64 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, acco
 
         <div className="flex-1" />
 
-        {/* Cancel */}
-        <button
-          onClick={e => { e.stopPropagation(); onCancel() }}
-          className="px-3 py-1.5 text-sm font-medium rounded-xl transition-all"
-          style={{ color: 'var(--text-secondary)', background: 'var(--bg-hover)' }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-        >
-          Cancel
-        </button>
+        {confirmDelete ? (
+          <>
+            <span className="text-xs flex-shrink-0" style={{ color: 'rgba(239,68,68,0.8)' }}>Delete this bill?</span>
+            <button
+              onClick={e => { e.stopPropagation(); setConfirmDelete(false) }}
+              className="px-3 py-1.5 text-sm font-medium rounded-xl transition-all"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-hover)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            >
+              Keep
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onDelete() }}
+              className="px-3 py-1.5 text-sm font-semibold rounded-xl transition-all active:scale-95"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.25)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
+            >
+              Delete
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Delete */}
+            <button
+              onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+              className="px-3 py-1.5 text-sm font-medium rounded-xl transition-all"
+              style={{ color: 'rgba(239,68,68,0.6)', background: 'transparent' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.color = '#f87171' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(239,68,68,0.6)' }}
+            >
+              Delete
+            </button>
 
-        {/* Save */}
-        <button
-          onClick={e => { e.stopPropagation(); handleSave() }}
-          className="px-4 py-1.5 text-sm font-semibold rounded-xl transition-all active:scale-95"
-          style={{ background: gradient, color: 'white', boxShadow: '0 4px 12px rgba(109,40,217,0.3)' }}
-          onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 6px 18px rgba(109,40,217,0.45)')}
-          onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(109,40,217,0.3)')}
-        >
-          Save
-        </button>
+            {/* Cancel */}
+            <button
+              onClick={e => { e.stopPropagation(); onCancel() }}
+              className="px-3 py-1.5 text-sm font-medium rounded-xl transition-all"
+              style={{ color: 'var(--text-secondary)', background: 'var(--bg-hover)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            >
+              Cancel
+            </button>
+
+            {/* Save */}
+            <button
+              onClick={e => { e.stopPropagation(); handleSave() }}
+              className="px-4 py-1.5 text-sm font-semibold rounded-xl transition-all active:scale-95"
+              style={{ background: gradient, color: 'white', boxShadow: '0 4px 12px rgba(109,40,217,0.3)' }}
+              onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 6px 18px rgba(109,40,217,0.45)')}
+              onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(109,40,217,0.3)')}
+            >
+              Save
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
