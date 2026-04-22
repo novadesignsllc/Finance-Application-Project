@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { Category, Transaction } from '../data/mockData'
+import type { BillFrequency } from '../data/billData'
+import { getNextPaymentDate, formatNextDate, nextDateUrgency } from '../data/billData'
 import EmojiPicker from './EmojiPicker'
 
 const IconExclaim = () => (
@@ -243,13 +245,24 @@ export default function CategoryRow({ category, isSelected, onSelect, onEmojiCha
       )}
 
       {/* Name */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
         <span
-          className="text-sm font-medium truncate block"
+          className="text-sm font-medium truncate"
           style={{ color: isSelected ? '#c4b5fd' : 'var(--text-primary)' }}
         >
           {category.name}
         </span>
+        {(() => {
+          const plan = category.plan
+          if (plan?.type !== 'bill' || !plan.goalDate || !plan.billFrequency) return null
+          const nextDate = getNextPaymentDate(plan.goalDate, plan.billFrequency as BillFrequency)
+          if (!nextDate) return null
+          return (
+            <span className="text-xs font-medium flex-shrink-0" style={{ color: nextDateUrgency(nextDate) }}>
+              {formatNextDate(nextDate)}
+            </span>
+          )
+        })()}
       </div>
 
       {/* Number columns — fixed width block, never squeezed */}
