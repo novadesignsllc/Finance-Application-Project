@@ -105,7 +105,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
             onEmojiChange={onEmojiChange}
             onAssignedChange={onAssignedChange}
             isLocked={group.id === ccGroupId || group.id === billsGroupId}
-            lockedVariant={group.id === billsGroupId ? 'bills' : 'cc'}
+            lockedVariant={group.id === billsGroupId ? 'bills' : group.id === ccGroupId ? 'cc' : undefined}
             onCategoryReorder={cats => {
               onGroupsChange(groups.map((g, i) => i === idx ? { ...g, categories: cats } : g))
             }}
