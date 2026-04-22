@@ -33,12 +33,11 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
   }
 
   const commitAddCategory = () => {
-    const name = newCatName.trim()
     const groupId = newCatGroupId || groups.find(g => g.id !== ccGroupId && g.id !== billsGroupId)?.id
-    if (name && groupId) {
+    if (groupId) {
       onGroupsChange(groups.map(g =>
         g.id === groupId
-          ? { ...g, categories: [...g.categories, { id: crypto.randomUUID(), name, emoji: '📁', assigned: 0, activity: 0, available: 0 }] }
+          ? { ...g, categories: [...g.categories, { id: crypto.randomUUID(), name: 'New Category', emoji: '📁', assigned: 0, activity: 0, available: 0 }] }
           : g
       ))
     }
@@ -160,42 +159,63 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
 
       <div className="px-5 pb-6">
         {addingCategory ? (
-          <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid rgba(109,40,217,0.3)' }}>
-            <span className="text-sm">📁</span>
-            <input
-              autoFocus
-              value={newCatName}
-              onChange={e => setNewCatName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') commitAddCategory(); if (e.key === 'Escape') { setAddingCategory(false); setNewCatName('') } }}
-              placeholder="Category name…"
-              className="flex-1 text-sm bg-transparent outline-none"
-              style={{ color: 'var(--text-primary)' }}
-            />
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-xl"
+            style={{ background: 'var(--bg-surface)', border: '1px solid rgba(109,40,217,0.3)' }}
+          >
+            <span className="text-base flex-shrink-0">📁</span>
             <select
-              value={newCatGroupId || groups[0]?.id || ''}
+              autoFocus
+              value={newCatGroupId || groups.find(g => g.id !== ccGroupId && g.id !== billsGroupId)?.id || ''}
               onChange={e => setNewCatGroupId(e.target.value)}
-              className="text-xs rounded-lg px-2 py-1 outline-none"
-              style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--color-border)' }}
+              className="flex-1 px-2 py-1 text-sm rounded-lg outline-none"
+              style={{
+                background: 'var(--bg-hover)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--text-primary)',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center',
+                paddingRight: '24px',
+              }}
             >
-              {groups.filter(g => g.id !== ccGroupId && g.id !== billsGroupId).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {groups.filter(g => g.id !== ccGroupId && g.id !== billsGroupId).map(g => (
+                <option key={g.id} value={g.id} style={{ background: '#1a1625' }}>{g.name}</option>
+              ))}
             </select>
-            <button onClick={commitAddCategory} className="text-xs font-semibold px-3 py-1 rounded-lg" style={{ background: 'linear-gradient(135deg,#7c3aed,#2563eb)', color: 'white' }}>
+            <button
+              onClick={commitAddCategory}
+              className="flex-shrink-0 px-3 py-1 text-xs font-semibold rounded-lg transition-all"
+              style={{ background: 'rgba(109,40,217,0.2)', color: '#c084fc', border: '1px solid rgba(109,40,217,0.35)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(109,40,217,0.3)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(109,40,217,0.2)')}
+            >
               Add
             </button>
-            <button onClick={() => { setAddingCategory(false); setNewCatName('') }} className="text-xs px-2 py-1 rounded-lg" style={{ color: 'var(--text-faint)' }}>
+            <button
+              onClick={() => { setAddingCategory(false); setNewCatName('') }}
+              className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-base rounded-lg transition-all"
+              style={{ color: 'var(--text-faint)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}
+            >
               ✕
             </button>
           </div>
         ) : (
           <button
             onClick={() => { setNewCatGroupId(groups.find(g => g.id !== ccGroupId && g.id !== billsGroupId)?.id || ''); setAddingCategory(true) }}
+            disabled={groups.filter(g => g.id !== ccGroupId && g.id !== billsGroupId).length === 0}
             className="flex items-center gap-2 px-4 py-2.5 w-full text-sm transition-all"
             style={{
               borderRadius: '12px',
               border: '1.5px dashed var(--color-border)',
               color: 'var(--text-faint)',
+              background: 'transparent',
+              opacity: groups.filter(g => g.id !== ccGroupId && g.id !== billsGroupId).length === 0 ? 0.4 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(109,40,217,0.4)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+            onMouseEnter={e => { if (groups.filter(g => g.id !== ccGroupId && g.id !== billsGroupId).length > 0) { e.currentTarget.style.borderColor = 'rgba(109,40,217,0.4)'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--text-faint)' }}
           >
             <span>+</span>

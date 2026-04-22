@@ -253,6 +253,7 @@ export default function CategoryGroup({
               onCatDragEnd={onCatDragEnd}
               isDraggingOver={draggingCatIdx !== null && draggingCatIdx === idx}
               isCCPayment={lockedVariant === 'cc'}
+              isLocked={isLocked && lockedVariant === 'bills'}
               transactions={transactions}
               budgetMonth={budgetMonth}
             />

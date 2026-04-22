@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import type { Category, Transaction } from '../data/mockData'
+import EmojiPicker from './EmojiPicker'
 
 const IconExclaim = () => (
   <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{ flexShrink: 0 }}>
@@ -36,17 +36,12 @@ interface CategoryRowProps {
   onCatDragEnd: () => void
   isDraggingOver?: boolean
   isCCPayment?: boolean
+  isLocked?: boolean
   transactions: Transaction[]
   budgetMonth: { year: number; month: number }
 }
 
-const EMOJI_OPTIONS = [
-  '🏠','⚡','📡','🛒','🚗','📱','🛡️','🧴','👕','🏆','🍽️','❤️','🎁','🪴','🛍️','✈️','💸',
-  '💰','💳','🏦','📊','🎯','🎮','🎵','🎬','📚','💻','🏋️','🌿','🐾','☕','🍕','🚀',
-  '🔧','🏥','🎓','🛺','🧳','🎪','🏖️','🌍','💡','🔑','📦','🧹','🎨','🪙','📁',
-]
-
-export default function CategoryRow({ category, isSelected, onSelect, onEmojiChange, onAssignedChange, catIndex, onCatDragStart, onCatDragOver, onCatDragEnd, isDraggingOver, isCCPayment, transactions, budgetMonth }: CategoryRowProps) {
+export default function CategoryRow({ category, isSelected, onSelect, onEmojiChange, onAssignedChange, catIndex, onCatDragStart, onCatDragOver, onCatDragEnd, isDraggingOver, isCCPayment, isLocked, transactions, budgetMonth }: CategoryRowProps) {
   const [editingAssigned, setEditingAssigned] = useState(false)
   const assignedInputRef = useRef<HTMLInputElement>(null)
   const [activityPopupPos, setActivityPopupPos] = useState<{ top: number; left: number } | null>(null)
@@ -65,17 +60,7 @@ export default function CategoryRow({ category, isSelected, onSelect, onEmojiCha
     setEditingAssigned(false)
   }, [onAssignedChange])
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const emojiRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
-        setShowEmojiPicker(false)
-      }
-    }
-    if (showEmojiPicker) document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showEmojiPicker])
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
 
   // Close activity popup on outside click
   useEffect(() => {
@@ -230,11 +215,12 @@ export default function CategoryRow({ category, isSelected, onSelect, onEmojiCha
       onMouseLeave={e => { if (!isSelected && !isDraggingOver) e.currentTarget.style.background = 'transparent' }}
     >
       {/* Emoji + picker */}
-      {isCCPayment ? (
-        <div className="flex-shrink-0 text-sm w-7 h-7 flex items-center justify-center">💳</div>
+      {(isCCPayment || isLocked) ? (
+        <div className="flex-shrink-0 text-sm w-7 h-7 flex items-center justify-center">{isCCPayment ? '💳' : category.emoji}</div>
       ) : (
-        <div className="relative flex-shrink-0" ref={emojiRef} onClick={e => e.stopPropagation()}>
+        <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
           <button
+            ref={emojiBtnRef}
             onClick={() => setShowEmojiPicker(p => !p)}
             className="text-sm w-7 h-7 flex items-center justify-center rounded-lg transition-all"
             title="Change emoji"
@@ -244,34 +230,13 @@ export default function CategoryRow({ category, isSelected, onSelect, onEmojiCha
           >
             {category.emoji}
           </button>
-
           {showEmojiPicker && (
-            <div
-              className="absolute left-0 top-full mt-1 z-50 rounded-2xl p-2"
-              style={{
-                background: 'var(--bg-surface)',
-                border: '1px solid rgba(109,40,217,0.3)',
-                boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-                width: '220px',
-              }}
-            >
-              <div className="grid grid-cols-8 gap-0.5">
-                {EMOJI_OPTIONS.map(e => (
-                  <button
-                    key={e}
-                    onClick={() => { onEmojiChange(e); setShowEmojiPicker(false) }}
-                    className="text-base w-7 h-7 flex items-center justify-center rounded-lg transition-all"
-                    style={{
-                      background: e === category.emoji ? 'rgba(109,40,217,0.25)' : 'transparent',
-                    }}
-                    onMouseEnter={el => (el.currentTarget.style.background = 'var(--bg-hover-strong)')}
-                    onMouseLeave={el => (el.currentTarget.style.background = e === category.emoji ? 'rgba(109,40,217,0.25)' : 'transparent')}
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <EmojiPicker
+              current={category.emoji}
+              onSelect={onEmojiChange}
+              onClose={() => setShowEmojiPicker(false)}
+              anchorRef={emojiBtnRef}
+            />
           )}
         </div>
       )}

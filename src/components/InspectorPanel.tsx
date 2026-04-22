@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Category, CategoryPlan, PlanType } from '../data/mockData'
 import DatePickerButton from './DatePickerButton'
+import EmojiPicker from './EmojiPicker'
 
 interface InspectorPanelProps {
   category: Category | null
@@ -9,6 +10,7 @@ interface InspectorPanelProps {
   onDebtPayoffChange: (catId: string, date: string | undefined) => void
   onDeleteCategory: (catId: string) => void
   onRenameCategory: (catId: string, name: string) => void
+  onEmojiChange: (catId: string, emoji: string) => void
   monthlyAssigned: Record<string, Record<string, number>>
   budgetMonth: { year: number; month: number }
 }
@@ -24,7 +26,7 @@ const fmt = (n: number) =>
 
 const MONTH_LETTERS = ['J','F','M','A','M','J','J','A','S','O','N','D']
 
-export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, onRenameCategory, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
+export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, onRenameCategory, onEmojiChange, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
   const [makingPlan, setMakingPlan] = useState(false)
   const [selectedType, setSelectedType] = useState<PlanType | null>(null)
   const [monthlyAmount, setMonthlyAmount] = useState('')
@@ -35,6 +37,8 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const emojiBtnRef = useRef<HTMLButtonElement>(null)
 
   // Reset plan editor when category changes
   useEffect(() => {
@@ -48,6 +52,7 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
     setConfirmDelete(false)
     setEditingName(false)
     setNameValue('')
+    setShowEmojiPicker(false)
   }, [category?.id])
 
   // Pre-fill when editing existing plan
@@ -383,7 +388,31 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
       {/* Category header */}
       <div className="p-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xl">{category.emoji}</span>
+          {(category.id.startsWith('cc-payment-') || category.id.startsWith('bill-category-')) ? (
+            <span className="text-xl">{category.emoji}</span>
+          ) : (
+            <>
+              <button
+                ref={emojiBtnRef}
+                onClick={() => setShowEmojiPicker(p => !p)}
+                className="text-xl w-8 h-8 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
+                title="Change emoji"
+                style={{ background: showEmojiPicker ? 'var(--bg-hover-strong)' : 'transparent' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+                onMouseLeave={e => { if (!showEmojiPicker) e.currentTarget.style.background = 'transparent' }}
+              >
+                {category.emoji}
+              </button>
+              {showEmojiPicker && (
+                <EmojiPicker
+                  current={category.emoji}
+                  onSelect={emoji => onEmojiChange(category.id, emoji)}
+                  onClose={() => setShowEmojiPicker(false)}
+                  anchorRef={emojiBtnRef}
+                />
+              )}
+            </>
+          )}
           {editingName ? (
             <input
               autoFocus
@@ -737,9 +766,34 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
         )}
       </div>
 
-      {/* Delete category — only for regular (non-bill) categories */}
+      {/* Rename + Delete — only for regular (non-bill) categories */}
       {!category.id.startsWith('bill-category-') && (
-        <div className="px-4 py-4" style={{ borderTop: '1px solid var(--color-border)', marginTop: 'auto' }}>
+        <div className="px-4 py-4 space-y-1" style={{ borderTop: '1px solid var(--color-border)', marginTop: 'auto' }}>
+          {/* Rename button */}
+          {!category.id.startsWith('cc-payment-') && (
+            editingName ? (
+              <input
+                autoFocus
+                value={nameValue}
+                onChange={e => setNameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setEditingName(false) }}
+                placeholder="Category name…"
+                className="w-full px-3 py-1.5 text-xs rounded-lg outline-none mb-1"
+                style={{ background: 'var(--bg-hover-strong)', border: '1px solid rgba(109,40,217,0.5)', color: 'var(--text-primary)' }}
+              />
+            ) : (
+              <button
+                onClick={() => { setNameValue(category.name); setEditingName(true) }}
+                className="w-full py-1.5 text-xs font-medium rounded-lg transition-all"
+                style={{ color: 'var(--text-secondary)' }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'transparent' }}
+              >
+                Rename Category
+              </button>
+            )
+          )}
           {confirmDelete ? (
             <div className="rounded-xl p-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
               <p className="text-xs font-semibold mb-1" style={{ color: '#f87171' }}>Delete this category?</p>
