@@ -693,7 +693,8 @@ function BudgetApp() {
               ? Math.max(0, (c.plan.monthlyAmount ?? 0) + activity)
               : 0
             available = carryover + assigned + activity - billPending
-            carryover = available
+            // Bills reset each month — no carryover
+            carryover = c.plan?.type === 'bill' ? 0 : available
           }
         }
 
@@ -1115,7 +1116,7 @@ function BudgetApp() {
                   transactions={transactions}
                   budgetMonth={budgetMonth}
                 />
-                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} onDeleteCategory={onDeleteCategory} onRenameCategory={onRenameCategory} onEmojiChange={onCategoryEmojiChange} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
+                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} onDeleteCategory={onDeleteCategory} onRenameCategory={onRenameCategory} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
               </>
             )}
           </div>

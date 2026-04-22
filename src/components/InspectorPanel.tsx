@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import type { Category, CategoryPlan, PlanType } from '../data/mockData'
 import DatePickerButton from './DatePickerButton'
-import EmojiPicker from './EmojiPicker'
 
 interface InspectorPanelProps {
   category: Category | null
@@ -10,7 +9,6 @@ interface InspectorPanelProps {
   onDebtPayoffChange: (catId: string, date: string | undefined) => void
   onDeleteCategory: (catId: string) => void
   onRenameCategory: (catId: string, name: string) => void
-  onEmojiChange: (catId: string, emoji: string) => void
   monthlyAssigned: Record<string, Record<string, number>>
   budgetMonth: { year: number; month: number }
 }
@@ -26,7 +24,7 @@ const fmt = (n: number) =>
 
 const MONTH_LETTERS = ['J','F','M','A','M','J','J','A','S','O','N','D']
 
-export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, onRenameCategory, onEmojiChange, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
+export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, onRenameCategory, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
   const [makingPlan, setMakingPlan] = useState(false)
   const [selectedType, setSelectedType] = useState<PlanType | null>(null)
   const [monthlyAmount, setMonthlyAmount] = useState('')
@@ -37,9 +35,6 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const emojiBtnRef = useRef<HTMLButtonElement>(null)
-
   // Reset plan editor when category changes
   useEffect(() => {
     setMakingPlan(false)
@@ -52,7 +47,6 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
     setConfirmDelete(false)
     setEditingName(false)
     setNameValue('')
-    setShowEmojiPicker(false)
   }, [category?.id])
 
   // Pre-fill when editing existing plan
@@ -388,31 +382,7 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
       {/* Category header */}
       <div className="p-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-2 mb-1">
-          {(category.id.startsWith('cc-payment-') || category.id.startsWith('bill-category-')) ? (
-            <span className="text-xl">{category.emoji}</span>
-          ) : (
-            <>
-              <button
-                ref={emojiBtnRef}
-                onClick={() => setShowEmojiPicker(p => !p)}
-                className="text-xl w-8 h-8 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
-                title="Change emoji"
-                style={{ background: showEmojiPicker ? 'var(--bg-hover-strong)' : 'transparent' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
-                onMouseLeave={e => { if (!showEmojiPicker) e.currentTarget.style.background = 'transparent' }}
-              >
-                {category.emoji}
-              </button>
-              {showEmojiPicker && (
-                <EmojiPicker
-                  current={category.emoji}
-                  onSelect={emoji => onEmojiChange(category.id, emoji)}
-                  onClose={() => setShowEmojiPicker(false)}
-                  anchorRef={emojiBtnRef}
-                />
-              )}
-            </>
-          )}
+          <span className="text-xl">{category.emoji}</span>
           {editingName ? (
             <input
               autoFocus
