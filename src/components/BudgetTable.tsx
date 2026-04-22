@@ -19,7 +19,6 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingCategory, setAddingCategory] = useState(false)
-  const [newCatName, setNewCatName] = useState('')
   const [newCatGroupId, setNewCatGroupId] = useState('')
 
   // Group drag state
@@ -42,7 +41,6 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
       ))
     }
     setAddingCategory(false)
-    setNewCatName('')
   }
 
   const onGroupDragStart = (idx: number) => { dragGroupIdx.current = idx }
@@ -194,7 +192,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
               Add
             </button>
             <button
-              onClick={() => { setAddingCategory(false); setNewCatName('') }}
+              onClick={() => setAddingCategory(false)}
               className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-base rounded-lg transition-all"
               style={{ color: 'var(--text-faint)' }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}

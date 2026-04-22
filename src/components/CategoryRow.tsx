@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { Category, Transaction } from '../data/mockData'
 import EmojiPicker from './EmojiPicker'
 

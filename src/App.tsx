@@ -627,7 +627,9 @@ function BudgetApp() {
 
         for (const mk of monthSequence) {
           const [mkYear, mkMonth] = mk.split('-').map(Number)
-          assigned = monthlyAssigned[mk]?.[c.id] ?? 0
+          assigned = c.plan?.type === 'bill'
+            ? (c.plan.monthlyAmount ?? 0)
+            : (monthlyAssigned[mk]?.[c.id] ?? 0)
 
           if (ccPaymentMap.has(c.id)) {
             // CC payment category
