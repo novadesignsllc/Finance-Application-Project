@@ -44,9 +44,12 @@ export default function Sidebar({ activeView, onViewChange, isDark, onThemeToggl
   const dragOverIndex = useRef<number | null>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
 
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const isPast = (d: string) => { const [m, dy, y] = d.split('/'); return new Date(+y, +m - 1, +dy) <= today }
+
   const workingBalance = (accountId: string) =>
     transactions
-      .filter(t => t.accountId === accountId)
+      .filter(t => t.accountId === accountId && isPast(t.date))
       .reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
 
   const openAccounts = accounts.filter(a => !closedAccountIds.has(a.id))

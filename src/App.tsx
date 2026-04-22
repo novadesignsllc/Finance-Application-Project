@@ -710,9 +710,11 @@ function BudgetApp() {
           const accountId = ccPaymentMap.get(c.id)!
           const ccTotalAssigned = Object.values(monthlyAssigned)
             .reduce((s, cats) => s + (cats[c.id] ?? 0), 0)
+          const _appToday = new Date(); _appToday.setHours(0, 0, 0, 0)
+          const isPastDate = (d: string) => { const [m, dy, y] = d.split('/'); return new Date(+y, +m - 1, +dy) <= _appToday }
           const ccAccountBalance = Math.abs(
             transactions
-              .filter(t => t.accountId === accountId)
+              .filter(t => t.accountId === accountId && isPastDate(t.date))
               .reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
           )
           // Debt payoff plan drives planStatus for CC categories
@@ -753,9 +755,11 @@ function BudgetApp() {
 
   const selectedCategory = budgetGroupsWithActivity.flatMap(g => g.categories).find(c => c.id === selectedCategoryId) ?? null
 
+  const _cashToday = new Date(); _cashToday.setHours(0, 0, 0, 0)
+  const isTxPast = (d: string) => { const [m, dy, y] = d.split('/'); return new Date(+y, +m - 1, +dy) <= _cashToday }
   const totalCash = accounts
     .filter(a => !closedAccountIds.has(a.id) && a.type !== 'credit')
-    .reduce((sum, a) => sum + transactions.filter(t => t.accountId === a.id).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0), 0)
+    .reduce((sum, a) => sum + transactions.filter(t => t.accountId === a.id && isTxPast(t.date)).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0), 0)
 
   // Sum assignments across all months up to and including current month
   // (not just the current month — otherwise navigating to a new month resets the balance)

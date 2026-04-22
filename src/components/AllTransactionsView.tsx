@@ -168,8 +168,10 @@ export default function AllTransactionsView({ accounts, transactions, onTransact
     return () => document.removeEventListener('mousedown', handler)
   }, [showCategoryPicker])
 
-  const clearedBalance = txList.filter(t => t.cleared).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
-  const unclearedBalance = txList.filter(t => !t.cleared).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+  const _today = new Date(); _today.setHours(0, 0, 0, 0)
+  const isPast = (d: string) => { const [m, dy, y] = d.split('/'); return new Date(+y, +m - 1, +dy) <= _today }
+  const clearedBalance = txList.filter(t => t.cleared && isPast(t.date)).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
+  const unclearedBalance = txList.filter(t => !t.cleared && isPast(t.date)).reduce((s, t) => s + (t.inflow ?? 0) - (t.outflow ?? 0), 0)
   const workingBalance = clearedBalance + unclearedBalance
 
   const balanceTabs = [
