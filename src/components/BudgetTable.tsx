@@ -7,6 +7,7 @@ interface BudgetTableProps {
   onSelect: (id: string) => void
   groups: CategoryGroupType[]
   onGroupsChange: (groups: CategoryGroupType[]) => void
+  onDeleteGroup: (groupId: string) => void
   onAssignedChange: (catId: string, value: number) => void
   ccGroupId?: string
   billsGroupId?: string
@@ -14,7 +15,7 @@ interface BudgetTableProps {
   budgetMonth: { year: number; month: number }
 }
 
-export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChange, onAssignedChange, ccGroupId, billsGroupId, transactions, budgetMonth }: BudgetTableProps) {
+export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChange, onDeleteGroup, onAssignedChange, ccGroupId, billsGroupId, transactions, budgetMonth }: BudgetTableProps) {
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingCategory, setAddingCategory] = useState(false)
@@ -114,6 +115,7 @@ export default function BudgetTable({ selectedId, onSelect, groups, onGroupsChan
             onRenameGroup={name => {
               onGroupsChange(groups.map((g, i) => i === idx ? { ...g, name } : g))
             }}
+            onDeleteGroup={group.id !== ccGroupId && group.id !== billsGroupId ? () => onDeleteGroup(group.id) : undefined}
             transactions={transactions}
             budgetMonth={budgetMonth}
           />

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { CategoryGroup as CategoryGroupType, Category, Transaction } from '../data/mockData'
 import CategoryRow from './CategoryRow'
 
@@ -14,6 +14,7 @@ interface CategoryGroupProps {
   onAssignedChange: (catId: string, value: number) => void
   onCategoryReorder: (cats: Category[]) => void
   onRenameGroup: (name: string) => void
+  onDeleteGroup?: () => void
   isLocked?: boolean
   lockedVariant?: 'cc' | 'bills'
   transactions: Transaction[]
@@ -23,11 +24,26 @@ interface CategoryGroupProps {
 export default function CategoryGroup({
   group, groupIndex, selectedId, onSelect,
   onGroupDragStart, onGroupDragOver, onDragEnd,
-  onEmojiChange, onAssignedChange, onCategoryReorder, onRenameGroup, isLocked, lockedVariant,
+  onEmojiChange, onAssignedChange, onCategoryReorder, onRenameGroup, onDeleteGroup, isLocked, lockedVariant,
   transactions, budgetMonth,
 }: CategoryGroupProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showMenu) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false)
+        setConfirmDelete(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMenu])
   const [draggingCatIdx, setDraggingCatIdx] = useState<number | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(group.name)
@@ -137,16 +153,51 @@ export default function CategoryGroup({
             <span
               className="text-xs font-bold uppercase tracking-widest select-none"
               style={{ color: isLocked && lockedVariant === 'bills' ? 'rgba(96,165,250,0.8)' : isLocked ? 'rgba(248,113,113,0.8)' : 'var(--text-secondary)' }}
-              onContextMenu={e => {
-                if (isLocked) return
-                e.preventDefault()
-                e.stopPropagation()
-                setNameValue(group.name)
-                setEditingName(true)
-              }}
             >
               {group.name}
             </span>
+          )}
+          {/* ··· menu for non-locked groups */}
+          {!isLocked && (
+            <div className="relative" ref={menuRef} onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => { setShowMenu(p => !p); setConfirmDelete(false) }}
+                className="w-5 h-5 flex items-center justify-center rounded text-xs transition-all"
+                style={{ color: 'var(--text-faint)', background: showMenu ? 'var(--bg-hover-strong)' : 'transparent' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover-strong)')}
+                onMouseLeave={e => { if (!showMenu) e.currentTarget.style.background = 'transparent' }}
+                title="Group options"
+              >···</button>
+              {showMenu && (
+                <div
+                  className="absolute left-0 top-full mt-1 rounded-xl py-1 z-50"
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--color-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', minWidth: 130 }}
+                >
+                  <button
+                    className="w-full text-left px-3 py-1.5 text-xs transition-all"
+                    style={{ color: 'var(--text-primary)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    onClick={() => { setShowMenu(false); setNameValue(group.name); setEditingName(true) }}
+                  >Rename</button>
+                  {!confirmDelete ? (
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-xs transition-all"
+                      style={{ color: '#f87171' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.08)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      onClick={() => setConfirmDelete(true)}
+                    >Delete group…</button>
+                  ) : (
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-xs font-semibold transition-all"
+                      style={{ color: '#f87171', background: 'rgba(239,68,68,0.12)' }}
+                      onClick={() => { setShowMenu(false); setConfirmDelete(false); onDeleteGroup?.() }}
+                    >Confirm delete</button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center flex-shrink-0">
@@ -201,7 +252,7 @@ export default function CategoryGroup({
               onCatDragOver={onCatDragOver}
               onCatDragEnd={onCatDragEnd}
               isDraggingOver={draggingCatIdx !== null && draggingCatIdx === idx}
-              isCCPayment={isLocked}
+              isCCPayment={lockedVariant === 'cc'}
               transactions={transactions}
               budgetMonth={budgetMonth}
             />

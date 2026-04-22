@@ -395,12 +395,14 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
               style={{ background: 'var(--bg-hover-strong)', border: '1px solid rgba(109,40,217,0.5)', color: 'var(--text-primary)' }}
             />
           ) : (
-            <h3
-              className="font-semibold text-sm cursor-text"
-              style={{ color: 'var(--text-primary)' }}
+            <button
+              className="group flex items-center gap-1 text-left"
               onClick={() => { setNameValue(category.name); setEditingName(true) }}
               title="Click to rename"
-            >{category.name}</h3>
+            >
+              <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{category.name}</h3>
+              <span className="text-xs opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: 'var(--text-faint)' }}>✎</span>
+            </button>
           )}
         </div>
         {category.overspent && (

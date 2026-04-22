@@ -647,6 +647,16 @@ export async function deleteCategory(catId: string): Promise<void> {
   await supabase.from('categories').delete().eq('id', catId)
 }
 
+// ── Delete a category group and all its categories ───────────────
+
+export async function deleteCategoryGroup(groupId: string, catIds: string[]): Promise<void> {
+  for (const catId of catIds) {
+    await supabase.from('budget_months').delete().eq('category_id', catId)
+    await supabase.from('categories').delete().eq('id', catId)
+  }
+  await supabase.from('category_groups').delete().eq('id', groupId)
+}
+
 // ── User profile ──────────────────────────────────────────────────
 
 export async function saveProfile(userId: string, displayName: string): Promise<void> {
