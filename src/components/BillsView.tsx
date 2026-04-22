@@ -17,30 +17,48 @@ const fmtMonthly = (amount: number, freq: BillFrequency) => {
 
 // ─── Emoji Picker ────────────────────────────────────────────────────────────
 
-function EmojiPicker({ current, onSelect, onClose }: { current: string; onSelect: (e: string) => void; onClose: () => void }) {
+function EmojiPicker({ current, onSelect, onClose, anchorRef }: {
+  current: string
+  onSelect: (e: string) => void
+  onClose: () => void
+  anchorRef: React.RefObject<HTMLButtonElement>
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [custom, setCustom] = useState(current)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+
+  useEffect(() => {
+    if (anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect()
+      setPos({ top: rect.bottom + 4, left: rect.left })
+    }
+  }, [anchorRef])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (ref.current && !ref.current.contains(e.target as Node) &&
+          anchorRef.current && !anchorRef.current.contains(e.target as Node)) onClose()
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
+  }, [onClose, anchorRef])
 
-  return (
+  return createPortal(
     <div
       ref={ref}
-      className="absolute left-0 top-full mt-1 z-50 rounded-2xl p-3"
       style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 9999,
+        width: 248,
+        borderRadius: 16,
+        padding: 12,
         background: 'var(--bg-surface)',
         border: '1px solid rgba(109,40,217,0.3)',
         boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
-        width: '248px',
       }}
     >
-      {/* Custom input */}
       <input
         autoFocus
         value={custom}
@@ -49,7 +67,6 @@ function EmojiPicker({ current, onSelect, onClose }: { current: string; onSelect
         className="w-full px-3 py-1.5 text-sm rounded-xl outline-none mb-2"
         style={{ background: 'var(--bg-hover)', border: '1px solid var(--color-border)', color: 'var(--text-primary)' }}
       />
-      {/* Preset grid */}
       <div className="grid grid-cols-8 gap-0.5">
         {EMOJI_PRESETS.map(e => (
           <button
@@ -64,7 +81,8 @@ function EmojiPicker({ current, onSelect, onClose }: { current: string; onSelect
           </button>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -96,6 +114,7 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, onDe
   const [dueDate, setDueDate] = useState(bill.dueDate ?? '')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const emojiButtonRef = useRef<HTMLButtonElement>(null)
 
   // Reset draft whenever this row enters edit mode
   useEffect(() => {
@@ -214,6 +233,7 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, onDe
         {/* Emoji */}
         <div className="relative flex-shrink-0">
           <button
+            ref={emojiButtonRef}
             onClick={() => setShowEmojiPicker(p => !p)}
             className="w-9 h-9 flex items-center justify-center text-xl rounded-xl transition-all"
             style={{
@@ -225,6 +245,7 @@ function BillRow({ bill, isSelected, isPending, onSelect, onSave, onCancel, onDe
           </button>
           {showEmojiPicker && (
             <EmojiPicker
+              anchorRef={emojiButtonRef}
               current={emoji}
               onSelect={e => setEmoji(e)}
               onClose={() => setShowEmojiPicker(false)}
@@ -405,11 +426,16 @@ interface BillGroupSectionProps {
   onDeleteBill: (id: string) => void
   accounts: Account[]
   gradientColors: string[]
+  crossGroupDragging: boolean
+  onCrossGroupDragStart: (billId: string) => void
+  onCrossGroupDragEnd: () => void
+  onReceiveBill: (billId: string) => void
 }
 
 function BillGroupSection({
   group, selectedId, pendingId, onToggleCollapse, onRename, onReorderBills,
   onSelectBill, onSaveBill, onCancelBill, onDeleteBill, accounts, gradientColors,
+  crossGroupDragging, onCrossGroupDragStart, onCrossGroupDragEnd, onReceiveBill,
 }: BillGroupSectionProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(group.name)
@@ -429,10 +455,15 @@ function BillGroupSection({
     if (editingName) inputRef.current?.focus()
   }, [editingName])
 
-  const onDragStart = useCallback((idx: number) => {
+  const [isDropOver, setIsDropOver] = useState(false)
+
+  const onDragStart = useCallback((idx: number, billId: string, e: React.DragEvent) => {
     dragIdx.current = idx
     setDraggingIdx(idx)
-  }, [])
+    e.dataTransfer.setData('billId', billId)
+    e.dataTransfer.setData('sourceGroupId', group.id)
+    onCrossGroupDragStart(billId)
+  }, [group.id, onCrossGroupDragStart])
 
   const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
     e.preventDefault()
@@ -450,10 +481,24 @@ function BillGroupSection({
     dragIdx.current = null
     setDraggingIdx(null)
     setDragOverIdx(null)
-  }, [])
+    setIsDropOver(false)
+    onCrossGroupDragEnd()
+  }, [onCrossGroupDragEnd])
 
   return (
-    <div>
+    <div
+      onDragOver={e => { if (crossGroupDragging) { e.preventDefault(); setIsDropOver(true) } }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDropOver(false) }}
+      onDrop={e => {
+        const billId = e.dataTransfer.getData('billId')
+        const srcGroupId = e.dataTransfer.getData('sourceGroupId')
+        if (billId && srcGroupId && srcGroupId !== group.id) {
+          e.preventDefault()
+          onReceiveBill(billId)
+        }
+        setIsDropOver(false)
+      }}
+    >
       {/* Group header */}
       <div
         className="flex items-center gap-2 px-4 py-2.5 select-none"
@@ -502,15 +547,20 @@ function BillGroupSection({
         )}
       </div>
 
-      {/* Bills (accordion) */}
+      {/* Drop indicator */}
+      {crossGroupDragging && isDropOver && (
+        <div style={{ height: 3, background: 'rgba(109,40,217,0.6)', borderRadius: 2, margin: '0 8px' }} />
+      )}
+
+      {/* Bills accordion */}
       <div style={{ display: 'grid', gridTemplateRows: group.collapsed ? '0fr' : '1fr', transition: 'grid-template-rows 0.22s ease' }}>
         <div style={{ overflow: 'hidden' }}>
           {group.bills.map((bill, idx) => (
             <div
               key={bill.id}
               draggable={selectedId !== bill.id}
-              onDragStart={e => { e.stopPropagation(); onDragStart(idx) }}
-              onDragOver={e => { e.stopPropagation(); onDragOver(e, idx) }}
+              onDragStart={e => { e.stopPropagation(); onDragStart(idx, bill.id, e) }}
+              onDragOver={e => { if (crossGroupDragging) { e.preventDefault() } else { e.stopPropagation(); onDragOver(e, idx) } }}
               onDragEnd={e => { e.stopPropagation(); onDragEnd() }}
               style={{
                 opacity: draggingIdx === idx ? 0.4 : 1,
@@ -573,6 +623,7 @@ export default function BillsView({ billGroups, onBillGroupsChange, onCreateTran
   const [addingBill, setAddingBill] = useState(false)
   const [newBillGroupId, setNewBillGroupId] = useState('')
   const [toast, setToast] = useState<{ accountName: string; action: 'created' | 'updated' } | null>(null)
+  const [crossDrag, setCrossDrag] = useState<{ billId: string; sourceGroupId: string } | null>(null)
 
   // Auto-dismiss toast after 4 s
   useEffect(() => {
@@ -744,8 +795,23 @@ export default function BillsView({ billGroups, onBillGroupsChange, onCreateTran
               onCancelBill={handleCancelBill}
               onDeleteBill={handleDeleteBill}
               accounts={accounts}
-
               gradientColors={gradientColors}
+              crossGroupDragging={!!(crossDrag && crossDrag.sourceGroupId !== group.id)}
+              onCrossGroupDragStart={billId => setCrossDrag({ billId, sourceGroupId: group.id })}
+              onCrossGroupDragEnd={() => setCrossDrag(null)}
+              onReceiveBill={billId => {
+                if (!crossDrag) return
+                updateGroups(gs => {
+                  const bill = gs.flatMap(g => g.bills).find(b => b.id === billId)
+                  if (!bill) return gs
+                  return gs.map(g => {
+                    if (g.id === crossDrag.sourceGroupId) return { ...g, bills: g.bills.filter(b => b.id !== billId) }
+                    if (g.id === group.id) return { ...g, bills: [...g.bills, bill] }
+                    return g
+                  })
+                })
+                setCrossDrag(null)
+              }}
             />
           ))
         )}

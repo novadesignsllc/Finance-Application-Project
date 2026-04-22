@@ -8,6 +8,7 @@ interface InspectorPanelProps {
   onAssignedChange: (catId: string, value: number) => void
   onDebtPayoffChange: (catId: string, date: string | undefined) => void
   onDeleteCategory: (catId: string) => void
+  onRenameCategory: (catId: string, name: string) => void
   monthlyAssigned: Record<string, Record<string, number>>
   budgetMonth: { year: number; month: number }
 }
@@ -23,7 +24,7 @@ const fmt = (n: number) =>
 
 const MONTH_LETTERS = ['J','F','M','A','M','J','J','A','S','O','N','D']
 
-export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
+export default function InspectorPanel({ category, onPlanChange, onAssignedChange, onDebtPayoffChange, onDeleteCategory, onRenameCategory, monthlyAssigned, budgetMonth }: InspectorPanelProps) {
   const [makingPlan, setMakingPlan] = useState(false)
   const [selectedType, setSelectedType] = useState<PlanType | null>(null)
   const [monthlyAmount, setMonthlyAmount] = useState('')
@@ -32,6 +33,8 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
   const [editingDebtPayoff, setEditingDebtPayoff] = useState(false)
   const [debtPayoffInput, setDebtPayoffInput] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState('')
 
   // Reset plan editor when category changes
   useEffect(() => {
@@ -43,6 +46,8 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
     setEditingDebtPayoff(false)
     setDebtPayoffInput('')
     setConfirmDelete(false)
+    setEditingName(false)
+    setNameValue('')
   }, [category?.id])
 
   // Pre-fill when editing existing plan
@@ -59,6 +64,13 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
       setGoalDate('')
     }
     setMakingPlan(true)
+  }
+
+  const commitRename = () => {
+    if (!category) return
+    const trimmed = nameValue.trim()
+    if (trimmed && trimmed !== category.name) onRenameCategory(category.id, trimmed)
+    setEditingName(false)
   }
 
   const savePlan = () => {
@@ -372,7 +384,24 @@ export default function InspectorPanel({ category, onPlanChange, onAssignedChang
       <div className="p-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xl">{category.emoji}</span>
-          <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{category.name}</h3>
+          {editingName ? (
+            <input
+              autoFocus
+              value={nameValue}
+              onChange={e => setNameValue(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setEditingName(false) }}
+              className="flex-1 px-2 py-0.5 text-sm font-semibold rounded-lg outline-none"
+              style={{ background: 'var(--bg-hover-strong)', border: '1px solid rgba(109,40,217,0.5)', color: 'var(--text-primary)' }}
+            />
+          ) : (
+            <h3
+              className="font-semibold text-sm cursor-text"
+              style={{ color: 'var(--text-primary)' }}
+              onClick={() => { setNameValue(category.name); setEditingName(true) }}
+              title="Click to rename"
+            >{category.name}</h3>
+          )}
         </div>
         {category.overspent && (
           <span className="inline-flex items-center gap-1 text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">

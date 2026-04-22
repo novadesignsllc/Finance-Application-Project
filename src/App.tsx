@@ -467,6 +467,17 @@ function BudgetApp() {
     })))
   }
 
+  const onRenameCategory = (catId: string, name: string) => {
+    setTransactions(prev => prev.map(tx => {
+      const cat = budgetGroups.flatMap(g => g.categories).find(c => c.id === catId)
+      return cat && tx.category === cat.name ? { ...tx, category: name } : tx
+    }))
+    setBudgetGroups(prev => prev.map(g => ({
+      ...g,
+      categories: g.categories.map(c => c.id === catId ? { ...c, name } : c),
+    })))
+  }
+
   const onDeleteCategory = (catId: string) => {
     setBudgetGroups(prev =>
       prev.map(g => ({ ...g, categories: g.categories.filter(c => c.id !== catId) }))
@@ -1075,7 +1086,7 @@ function BudgetApp() {
                   transactions={transactions}
                   budgetMonth={budgetMonth}
                 />
-                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} onDeleteCategory={onDeleteCategory} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
+                <InspectorPanel category={selectedCategory} onPlanChange={onPlanChange} onAssignedChange={onAssignedChange} onDebtPayoffChange={onDebtPayoffChange} onDeleteCategory={onDeleteCategory} onRenameCategory={onRenameCategory} monthlyAssigned={monthlyAssigned} budgetMonth={budgetMonth} />
               </>
             )}
           </div>
